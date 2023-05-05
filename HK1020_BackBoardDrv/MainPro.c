@@ -95,7 +95,7 @@ void main(void)
 	SystemInit();
 	Delay_MS(4000);
 	SendStringDataToPC("System Init...\r\n");
-	SendStringDataToPC("\r\n	Program Version V1.6.1...\r\n");
+	SendStringDataToPC("\r\n	Program Version V1.7...\r\n");
 	SendStringDataToPC("\r\nPlease Send Commad : Start Debug/Normal Read/Trim TemperaturePoints@\r\n");
 	SendStringDataToPC("\r\nTemperaturePoints : One,Three,Six,Ten,Eleven\r\n");
 	SendStringDataToPC("\r\nAdd 'Default' can skip input Pt100\r\n");
@@ -227,15 +227,6 @@ SysInit:
 			/*************************************************************/
 			break;
 		}
-	}
-
-	if (bRunMode == NORMAL_MODE)
-	{
-
-		SendStringDataToPC("Testing YSL Chamber...\r\n");
-		SetChamberOn(YslChamber, TCXXXChamber);								// 启动温箱
-		ReadChamberTemperature(YslChamber, TCXXXChamber, &LabChamTemp, PV); // 获取温箱当前温度
-		Delay_MS(1000);
 	}
 
 	SetVoltage(0.0f);
@@ -492,19 +483,15 @@ SysInit:
 			if (TRIMING == nTrimOrRead)
 			{
 				/**********************************************
-														校准程序开始
+								校准程序开始
 				***********************************************/
 				SendStringDataToPC("\r\nTrimming Start ......\r\n");
 				if (bTestFlag == 0)
 				{
-					/*************20度温箱校准*****************/
+					/*************25度温箱校准*****************/
 					sprintf(nRecieveData, "\r\n\r\n\tSet chamber's temperature to %.2f Celsius.\r\n", 25.0);
 					SendStringDataToPC(nRecieveData);
-					//					SetChamberTemperature(LabEventChamber,TCXXXChamber,25.0);
-
-					/**************温箱稳定程序**********************/
-					/*(判断模式区分 0:到达温度点30分钟 1:温箱稳定到 温度稳定值 以下，温度点，温度稳定值，稳定采样次数)*/
-					//  				WaitChamberStable(0,20.0,0.5,8,0.1,5);
+					SetChamberTemperature(YslChamber,TCXXXChamber,25.0);
 
 					for (i = 0; i < 60; i++)
 					{
@@ -811,21 +798,11 @@ SysInit:
 			{
 				sprintf(nRecieveData, "\r\n\r\n\tSet chamber's temperature to %.2f Celsius.\r\n", fSetChamberTemperature[nTemperaturePoint]);
 				SendStringDataToPC(nRecieveData);
+				SetChamberTemperature(YslChamber,TCXXXChamber,fSetChamberTemperature[nTemperaturePoint]);
 				if (bTestFlag == 0)
 				{
 					if (bRunMode == NORMAL_MODE)
 					{
-						//						SetChamberTemperature(LabEventChamber,TCXXXChamber,fSetChamberTemperature[nTemperaturePoint]);
-						/**************温箱稳定程序**********************/
-						//					if(fSetChamberTemperature[nTemperaturePoint] != -55.0){
-						//						if(fSetChamberTemperature[nTemperaturePoint] < 25.0 ){
-						//							WaitChamberStable(0,fSetChamberTemperature[nTemperaturePoint],0.5,8,0.1,5);
-						//						}
-						//						else{
-						//							WaitChamberStable(1,fSetChamberTemperature[nTemperaturePoint],0.3,8,0.1,3);
-						//						}
-						//					}
-						/*****************************************************************/
 						for (k = 0; k < 120; k++) // 1 hour
 						{
 							Delay_MS(30000);
@@ -865,7 +842,7 @@ SysInit:
 						else
 						{ // 巡检仪出错
 
-							//							SetChamberOff(LabEventChamber,TCXXXChamber); // 关闭温箱
+							SetChamberOff(YslChamber,TCXXXChamber); // 关闭温箱
 							SetVoltage(0.0f);
 
 							SendStringDataToPC("The number of consecutive errors received by the XJY has reached 10 times. Please check that the XJY has failed!!!\r\n\tand then power it back on.\r\n");
@@ -990,7 +967,7 @@ SysInit:
 				}
 			}
 			SendStringDataToPC("\r\n\r\n");
-			//			SetChamberOff(LabEventChamber,TCXXXChamber); // 关闭温箱
+			SetChamberOff(YslChamber,TCXXXChamber); // 关闭温箱
 
 			SendStringDataToPC("\r\n18B20 Reading Temperature Process finished,Send [NextStart@] again for next starting ...\r\n");
 			ES = 0x01;
