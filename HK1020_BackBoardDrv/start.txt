@@ -1,0 +1,2 @@
+trim start-NORMAL@DEBUG@
+read start-DEBUG@NORMAL@

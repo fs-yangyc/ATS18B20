@@ -1,0 +1,12 @@
+".\Objects\DataTrans.obj",
+".\Objects\pc.obj",
+".\Objects\TstBrdContrl.obj",
+".\Objects\DelayTime.obj",
+".\Objects\SystemInit.obj",
+".\Objects\MainPro.obj",
+".\Objects\Chamber.obj",
+".\Objects\cfguo.obj",
+".\Objects\NewPower.obj",
+".\Objects\Crc16_MODBUS.obj" 
+TO ".\Objects\BackBrdDrv_Pro" 
+PRINT(".\Listings\BackBrdDrv_Pro.m51") RAMSIZE(256) 

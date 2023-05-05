@@ -1,0 +1,241 @@
+C51 COMPILER V9.60.0.0   DELAYTIME                                                         05/05/2023 15:28:49 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE DELAYTIME
+OBJECT MODULE PLACED IN .\Objects\DelayTime.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE DelayTime.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND CODE
+                    - PRINT(.\Listings\DelayTime.lst) TABS(2) OBJECT(.\Objects\DelayTime.obj)
+
+line level    source
+
+   1          #include <DelayTime.h>
+   2          
+   3          char nRunStopCunt = 0;
+   4          
+   5          unsigned char nTimer0Cunt = 0;
+   6          
+   7          void Delay_MS(unsigned int nDelayMs) //22.1184MHz 时钟下面延时1ms，示波器下面观察的结果
+   8          {
+   9   1        int nDelayCunt = 0;
+  10   1      
+  11   1        AUXR |= 0x80; //定时器0时钟1T模式
+  12   1        TMOD &= 0xF0; //设置定时器模式
+  13   1        
+  14   1        TL0 = 0xCD;   //设置定时初值
+  15   1        TH0 = 0xD4;   //设置定时初值
+  16   1        TF0 = 0;    //清除TF0标志
+  17   1        
+  18   1        ET0  = 0x01;
+  19   1        TR0  = 0x01;
+  20   1        
+  21   1        while(1){
+  22   2          if(nTimer0Cunt == 2){
+  23   3            nTimer0Cunt = 0;
+  24   3            nDelayCunt++;
+  25   3          }
+  26   2      
+  27   2          if(nDelayCunt == nDelayMs) // 计时时间到或者是按了Stop键
+  28   2          {
+  29   3            TR0  = 0x00;
+  30   3            ET0  = 0x00;
+  31   3            break;
+  32   3          }
+  33   2        }
+  34   1      }
+  35          
+  36          void Delay_5US(void)
+  37          {
+  38   1        nTimer0Cunt = 0;
+  39   1        
+  40   1        AUXR |= 0x80;   //定时器0时钟1T模式
+  41   1        TMOD &= 0xF0;   //设置定时器模式
+  42   1        TL0 = 0x91;   //设置定时初值
+  43   1        TH0 = 0xFF;   //设置定时初值
+  44   1        TF0 = 0;    //清除TF0标志
+  45   1        
+  46   1        ET0  = 0x01;
+  47   1        TR0  = 0x01;
+  48   1        
+  49   1        while(1)
+  50   1        {
+  51   2          if(nTimer0Cunt == 1)
+  52   2          {
+  53   3            TR0  = 0x00;
+  54   3            ET0  = 0x00;
+C51 COMPILER V9.60.0.0   DELAYTIME                                                         05/05/2023 15:28:49 PAGE 2   
+
+  55   3            nTimer0Cunt = 0;
+  56   3            break;
+  57   3          }
+  58   2        }
+  59   1      }
+  60          /****************************
+  61          void Delay_60US(void)
+  62          {
+  63            nTimer0Cunt = 0;
+  64            
+  65            AUXR |= 0x80;   //定时器0时钟1T模式
+  66            TMOD &= 0xF0;   //设置定时器模式
+  67            TL0 = 0xD1;   //设置定时初值
+  68            TH0 = 0xFA;   //设置定时初值
+  69            TF0 = 0;    //清除TF0标志
+  70            
+  71            ET0  = 0x01;
+  72            TR0  = 0x01;
+  73            
+  74            while(1)
+  75            {
+  76              if(nTimer0Cunt == 1)
+  77              {
+  78                TR0  = 0x00;
+  79                ET0  = 0x00;
+  80                nTimer0Cunt = 0;
+  81                break;
+  82              }
+  83            }
+  84          }
+  85          *****************************/
+  86          void Timer0Interrupt (void) interrupt 1 using 3
+  87          {
+  88   1        nTimer0Cunt++;
+  89   1      }
+C51 COMPILER V9.60.0.0   DELAYTIME                                                         05/05/2023 15:28:49 PAGE 3   
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+             ; FUNCTION _Delay_MS (BEGIN)
+                                           ; SOURCE LINE # 7
+;---- Variable 'nDelayMs' assigned to Register 'R6/R7' ----
+                                           ; SOURCE LINE # 8
+                                           ; SOURCE LINE # 9
+;---- Variable 'nDelayCunt' assigned to Register 'R4/R5' ----
+0000 E4                CLR     A
+0001 FD                MOV     R5,A
+0002 FC                MOV     R4,A
+                                           ; SOURCE LINE # 11
+0003 438E80            ORL     AUXR,#080H
+                                           ; SOURCE LINE # 12
+0006 5389F0            ANL     TMOD,#0F0H
+                                           ; SOURCE LINE # 14
+0009 758ACD            MOV     TL0,#0CDH
+                                           ; SOURCE LINE # 15
+000C 758CD4            MOV     TH0,#0D4H
+                                           ; SOURCE LINE # 16
+000F C28D              CLR     TF0
+                                           ; SOURCE LINE # 18
+0011 D2A9              SETB    ET0
+                                           ; SOURCE LINE # 19
+0013 D28C              SETB    TR0
+0015         ?C0001:
+                                           ; SOURCE LINE # 21
+                                           ; SOURCE LINE # 22
+0015 900000      R     MOV     DPTR,#nTimer0Cunt
+0018 E0                MOVX    A,@DPTR
+0019 6402              XRL     A,#02H
+001B 7006              JNZ     ?C0003
+                                           ; SOURCE LINE # 23
+001D F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 24
+001E 0D                INC     R5
+001F ED                MOV     A,R5
+0020 7001              JNZ     ?C0011
+0022 0C                INC     R4
+0023         ?C0011:
+                                           ; SOURCE LINE # 25
+0023         ?C0003:
+                                           ; SOURCE LINE # 27
+0023 ED                MOV     A,R5
+0024 B507EE            CJNE    A,AR7,?C0001
+0027 EC                MOV     A,R4
+0028 B506EA            CJNE    A,AR6,?C0001
+                                           ; SOURCE LINE # 28
+                                           ; SOURCE LINE # 29
+002B C28C              CLR     TR0
+                                           ; SOURCE LINE # 30
+002D C2A9              CLR     ET0
+                                           ; SOURCE LINE # 31
+                                           ; SOURCE LINE # 32
+                                           ; SOURCE LINE # 33
+                                           ; SOURCE LINE # 34
+002F 22                RET     
+             ; FUNCTION _Delay_MS (END)
+
+             ; FUNCTION Delay_5US (BEGIN)
+                                           ; SOURCE LINE # 36
+C51 COMPILER V9.60.0.0   DELAYTIME                                                         05/05/2023 15:28:49 PAGE 4   
+
+                                           ; SOURCE LINE # 37
+                                           ; SOURCE LINE # 38
+0000 E4                CLR     A
+0001 900000      R     MOV     DPTR,#nTimer0Cunt
+0004 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 40
+0005 438E80            ORL     AUXR,#080H
+                                           ; SOURCE LINE # 41
+0008 5389F0            ANL     TMOD,#0F0H
+                                           ; SOURCE LINE # 42
+000B 758A91            MOV     TL0,#091H
+                                           ; SOURCE LINE # 43
+000E 758CFF            MOV     TH0,#0FFH
+                                           ; SOURCE LINE # 44
+0011 C28D              CLR     TF0
+                                           ; SOURCE LINE # 46
+0013 D2A9              SETB    ET0
+                                           ; SOURCE LINE # 47
+0015 D28C              SETB    TR0
+0017         ?C0006:
+                                           ; SOURCE LINE # 49
+                                           ; SOURCE LINE # 50
+                                           ; SOURCE LINE # 51
+0017 900000      R     MOV     DPTR,#nTimer0Cunt
+001A E0                MOVX    A,@DPTR
+001B 6401              XRL     A,#01H
+001D 70F8              JNZ     ?C0006
+                                           ; SOURCE LINE # 52
+                                           ; SOURCE LINE # 53
+001F C28C              CLR     TR0
+                                           ; SOURCE LINE # 54
+0021 C2A9              CLR     ET0
+                                           ; SOURCE LINE # 55
+0023 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 56
+                                           ; SOURCE LINE # 57
+                                           ; SOURCE LINE # 58
+                                           ; SOURCE LINE # 59
+0024 22                RET     
+             ; FUNCTION Delay_5US (END)
+
+             ; FUNCTION Timer0Interrupt (BEGIN)
+0000 C0E0              PUSH    ACC
+0002 C083              PUSH    DPH
+0004 C082              PUSH    DPL
+                                           ; SOURCE LINE # 86
+                                           ; SOURCE LINE # 88
+0006 900000      R     MOV     DPTR,#nTimer0Cunt
+0009 E0                MOVX    A,@DPTR
+000A 04                INC     A
+000B F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 89
+000C D082              POP     DPL
+000E D083              POP     DPH
+0010 D0E0              POP     ACC
+0012 32                RETI    
+             ; FUNCTION Timer0Interrupt (END)
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    104    ----
+C51 COMPILER V9.60.0.0   DELAYTIME                                                         05/05/2023 15:28:49 PAGE 5   
+
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      2    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

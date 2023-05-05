@@ -1,0 +1,7 @@
+".\Objects\TC18B20NewTrimming.obj",
+".\Objects\DelayTime.obj",
+".\Objects\RWData.obj",
+".\Objects\SystemInit.obj",
+".\Objects\TranslateData.obj" 
+TO ".\Objects\HK1020Trimming_Pro" 
+PRINT(".\Listings\HK1020Trimming_Pro.m51") RAMSIZE(256) 

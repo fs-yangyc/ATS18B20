@@ -1,0 +1,1389 @@
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE NEWPOWER
+OBJECT MODULE PLACED IN .\Objects\NewPower.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE NewPower.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND CODE 
+                    -PRINT(.\Listings\NewPower.lst) TABS(2) OBJECT(.\Objects\NewPower.obj)
+
+line level    source
+
+   1          #include <NewPower.h>
+   2          #include <DelayTime.h>
+   3          
+   4          unsigned char code nPwrDevice[8] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+   5          void ResetI2CPort(void)
+   6          {
+   7   1        NewPower_SCL = 0x01;
+   8   1        NewPower_SDA = 0x01;
+   9   1      }
+  10          
+  11          void I2CStart(void)
+  12          {
+  13   1        ResetI2CPort();
+  14   1        Delay_MS(1);
+  15   1        
+  16   1        NewPower_SDA = 0x00;
+  17   1        Delay_5US();
+  18   1        NewPower_SCL = 0x00;
+  19   1        Delay_5US();
+  20   1      }
+  21          
+  22          void I2CDeviceAck(void)
+  23          {
+  24   1        NewPower_SDA = 0x01;
+  25   1        Delay_5US();
+  26   1        NewPower_SCL = 0x01;
+  27   1        Delay_5US();
+  28   1        NewPower_SCL = 0x00;
+  29   1      }
+  30          
+  31          void I2CStop(void)
+  32          {
+  33   1        NewPower_SDA = 0x00;
+  34   1        Delay_5US();
+  35   1        NewPower_SCL = 0x01;
+  36   1        Delay_5US();
+  37   1        NewPower_SDA = 0x01;
+  38   1        Delay_5US();
+  39   1      }
+  40          
+  41          void I2CWriteDataToDevice(unsigned char nDeviceAddr,unsigned char *nData, unsigned char nDataCunt)
+  42          {
+  43   1        unsigned char nCunt,nBitCunt;
+  44   1        
+  45   1        I2CStart();
+  46   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+  47   2          if(nDeviceAddr & nPwrDevice[nBitCunt]){
+  48   3            NewPower_SDA = 0x01;
+  49   3          }
+  50   2          
+  51   2          else{
+  52   3            NewPower_SDA = 0x00;
+  53   3          }
+  54   2          
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 2   
+
+  55   2          Delay_5US();
+  56   2          NewPower_SCL = 0x01;
+  57   2          Delay_5US();
+  58   2          NewPower_SCL = 0x00;
+  59   2        }
+  60   1        
+  61   1        I2CDeviceAck();
+  62   1        for(nCunt = 0; nCunt < nDataCunt; nCunt++){
+  63   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+  64   3            if(nData[nCunt] & nPwrDevice[nBitCunt]){
+  65   4              NewPower_SDA = 0x01;
+  66   4            }
+  67   3            
+  68   3            else{
+  69   4              NewPower_SDA = 0x00;
+  70   4            }
+  71   3            
+  72   3            Delay_5US();
+  73   3            NewPower_SCL = 0x01;
+  74   3            Delay_5US();
+  75   3            NewPower_SCL = 0x00;
+  76   3          }
+  77   2        
+  78   2          I2CDeviceAck();
+  79   2        }
+  80   1        
+  81   1        I2CStop();
+  82   1      }
+  83          
+  84          void ReadDataFromADS1100(unsigned char *nReadData)
+  85          {
+  86   1        unsigned char nAds100Addr,nDataCunt,nBitCunt;
+  87   1        
+  88   1        for(nDataCunt = 0; nDataCunt < 3; nDataCunt++){
+  89   2          nReadData[nDataCunt] = 0x00;
+  90   2        }
+  91   1        
+  92   1        nAds100Addr = ADS1100_ADDR | 0x01; // Read_Addr
+  93   1        I2CStart();
+  94   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+  95   2          if(nAds100Addr & nPwrDevice[nBitCunt]){
+  96   3            NewPower_SDA = 0x01;
+  97   3          }
+  98   2          
+  99   2          else{
+ 100   3            NewPower_SDA = 0x00;
+ 101   3          }
+ 102   2          
+ 103   2          Delay_5US();
+ 104   2          NewPower_SCL = 0x01;
+ 105   2          Delay_5US();
+ 106   2          NewPower_SCL = 0x00;
+ 107   2        }
+ 108   1        
+ 109   1        I2CDeviceAck();
+ 110   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 111   2          Delay_5US();
+ 112   2          NewPower_SCL = 0x01;
+ 113   2          Delay_5US();
+ 114   2          if(NewPower_SDA){
+ 115   3            nReadData[0] |= nPwrDevice[nBitCunt];
+ 116   3          }
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 3   
+
+ 117   2          
+ 118   2          else{
+ 119   3            nReadData[0] |= 0x00;
+ 120   3          }
+ 121   2          
+ 122   2          NewPower_SCL = 0x00;
+ 123   2        }
+ 124   1        
+ 125   1        NewPower_SDA = 0x00;  // ACK
+ 126   1        Delay_5US();
+ 127   1        NewPower_SCL = 0x01;
+ 128   1        Delay_5US();
+ 129   1        
+ 130   1        NewPower_SCL = 0x00;
+ 131   1        NewPower_SDA = 0x01;
+ 132   1        Delay_5US();
+ 133   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 134   2          NewPower_SCL = 0x01;
+ 135   2          Delay_5US();
+ 136   2          if(NewPower_SDA){
+ 137   3            nReadData[1] |= nPwrDevice[nBitCunt];
+ 138   3          }
+ 139   2          
+ 140   2          else{
+ 141   3            nReadData[1] |= 0x00;
+ 142   3          }
+ 143   2          
+ 144   2          NewPower_SCL = 0x00;
+ 145   2          if(7 != nBitCunt){
+ 146   3            Delay_5US();
+ 147   3          }
+ 148   2        }
+ 149   1        
+ 150   1        NewPower_SDA = 0x00;  // ACK
+ 151   1        Delay_5US();
+ 152   1        NewPower_SCL = 0x01;
+ 153   1        Delay_5US();
+ 154   1        
+ 155   1        NewPower_SCL = 0x00;
+ 156   1        NewPower_SDA = 0x01;
+ 157   1        Delay_5US();
+ 158   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 159   2          NewPower_SCL = 0x01;
+ 160   2          Delay_5US();
+ 161   2          if(NewPower_SDA){
+ 162   3            nReadData[2] |= nPwrDevice[nBitCunt];
+ 163   3          }
+ 164   2          
+ 165   2          else{
+ 166   3            nReadData[2] |= 0x00;
+ 167   3          }
+ 168   2          
+ 169   2          NewPower_SCL = 0x00;
+ 170   2          if(7 != nBitCunt){
+ 171   3            Delay_5US();
+ 172   3          }
+ 173   2        }
+ 174   1        
+ 175   1        NewPower_SDA = 0x00;  // ACK
+ 176   1        Delay_5US();
+ 177   1        NewPower_SCL = 0x01;
+ 178   1        Delay_5US();
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 4   
+
+ 179   1        
+ 180   1        NewPower_SCL = 0x00;
+ 181   1        Delay_5US();
+ 182   1        NewPower_SCL = 0x01;
+ 183   1        Delay_5US();
+ 184   1        NewPower_SDA = 0x01;  // STOP
+ 185   1        Delay_5US();
+ 186   1      }
+ 187          
+ 188          void WriteDataToMAX5821(unsigned char nDeviceAddr,int nData, unsigned char nCommand)
+ 189          {
+ 190   1        unsigned char nWriteData[2];
+ 191   1        
+ 192   1        nWriteData[1] = nData;
+ 193   1        nWriteData[0] = MAX5812_LOAD_DAC | (nData >> 0x08);
+ 194   1        
+ 195   1        I2CWriteDataToDevice(nDeviceAddr,nWriteData,0x02);
+ 196   1        I2CWriteDataToDevice(nDeviceAddr,&nCommand,0x01);
+ 197   1      }
+ 198          
+ 199          void SetVoltage(float fVoltage)
+ 200          {
+ 201   1        int nDigtal;
+ 202   1        float fVref = 5.0;
+ 203   1        
+ 204   1      //  nDigtal = fVoltage * 4096.0 / (1.98 * fVref); // 输出电压被放大了2倍
+ 205   1        nDigtal = fVoltage * 4096.0 / (3 * fVref); // 输出电压被放大了3倍
+ 206   1        WriteDataToMAX5821(MAX5812_ADDR,nDigtal,0x40);
+ 207   1      }
+ 208          
+ 209          void ReadOPA544OutputCurrent(unsigned char nAds1100Gain,unsigned char nSampleCunt,float *fIccurent)
+ 210          {
+ 211   1        unsigned char nConfigureData,nReadDataCunt,nReadData[3];
+ 212   1        int nAds100OutData = 0;
+ 213   1        float fIcc = 0.0,fIccGain,fVref = 5.0,fRSample = 0.5;
+ 214   1        
+ 215   1        *fIccurent = 0.0;
+ 216   1        if(ADS1100_PGA_GAIN_1 == nAds1100Gain){ // LM358放大了2倍
+ 217   2          fIccGain = 2.0;
+ 218   2        }
+ 219   1        
+ 220   1        if(ADS1100_PGA_GAIN_2 == nAds1100Gain){ // LM358放大了2倍
+ 221   2          fIccGain = 4.0;
+ 222   2        }
+ 223   1        
+ 224   1        if(ADS1100_PGA_GAIN_4 == nAds1100Gain){ // LM358放大了2倍
+ 225   2          fIccGain = 8.0;
+ 226   2        }
+ 227   1        
+ 228   1        if(ADS1100_PGA_GAIN_8 == nAds1100Gain){ // LM358放大了2倍
+ 229   2          fIccGain = 16.0;
+ 230   2        }
+ 231   1        
+ 232   1        nConfigureData = ADS1100_SC_SINGLE | ADS1100_DR_SPS_8 | nAds1100Gain;
+ 233   1        I2CWriteDataToDevice(ADS1100_ADDR,&nConfigureData,0x01);
+ 234   1        Delay_MS(1);
+ 235   1        nConfigureData = ADS1100_SC_SINGLE_START | ADS1100_SC_SINGLE | ADS1100_DR_SPS_8 | nAds1100Gain;
+ 236   1        for(nReadDataCunt = 0; nReadDataCunt < nSampleCunt; nReadDataCunt++){
+ 237   2          I2CWriteDataToDevice(ADS1100_ADDR,&nConfigureData,0x01); // 启动一次转换
+ 238   2          while(1){ // 等待转换结束
+ 239   3            ReadDataFromADS1100(nReadData);
+ 240   3            if(!(nReadData[2] & 0x80)){
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 5   
+
+ 241   4              break;
+ 242   4            }
+ 243   3            
+ 244   3            else{
+ 245   4              Delay_MS(1);
+ 246   4            }
+ 247   3          }
+ 248   2          
+ 249   2          ReadDataFromADS1100(nReadData);
+ 250   2          
+ 251   2          nAds100OutData = nReadData[0];
+ 252   2          nAds100OutData <<= 0x08;
+ 253   2          nAds100OutData |= nReadData[1];
+ 254   2          
+ 255   2          fIcc = ((fVref * (float)nAds100OutData) / (32768.0 * fIccGain)) / fRSample;
+ 256   2          *fIccurent = *fIccurent + fIcc / ((float)nSampleCunt);
+ 257   2        }
+ 258   1      }
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 6   
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+             ; FUNCTION ResetI2CPort (BEGIN)
+                                           ; SOURCE LINE # 5
+                                           ; SOURCE LINE # 6
+                                           ; SOURCE LINE # 7
+0000 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 8
+0002 D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 9
+0004 22                RET     
+             ; FUNCTION ResetI2CPort (END)
+
+             ; FUNCTION I2CStart (BEGIN)
+                                           ; SOURCE LINE # 11
+                                           ; SOURCE LINE # 12
+                                           ; SOURCE LINE # 13
+0000 120000      R     LCALL   ResetI2CPort
+                                           ; SOURCE LINE # 14
+0003 7F01              MOV     R7,#01H
+0005 7E00              MOV     R6,#00H
+0007 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 16
+000A C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 17
+000C 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 18
+000F C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 19
+0011 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 20
+0014 22                RET     
+             ; FUNCTION I2CStart (END)
+
+             ; FUNCTION I2CDeviceAck (BEGIN)
+                                           ; SOURCE LINE # 22
+                                           ; SOURCE LINE # 23
+                                           ; SOURCE LINE # 24
+0000 D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 25
+0002 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 26
+0005 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 27
+0007 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 28
+000A C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 29
+000C 22                RET     
+             ; FUNCTION I2CDeviceAck (END)
+
+             ; FUNCTION I2CStop (BEGIN)
+                                           ; SOURCE LINE # 31
+                                           ; SOURCE LINE # 32
+                                           ; SOURCE LINE # 33
+0000 C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 34
+0002 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 35
+0005 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 36
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 7   
+
+0007 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 37
+000A D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 38
+000C 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 39
+000F 22                RET     
+             ; FUNCTION I2CStop (END)
+
+             ; FUNCTION _I2CWriteDataToDevice (BEGIN)
+                                           ; SOURCE LINE # 41
+0000 900000      R     MOV     DPTR,#nDeviceAddr
+0003 EF                MOV     A,R7
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EB                MOV     A,R3
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 EA                MOV     A,R2
+000A F0                MOVX    @DPTR,A
+000B A3                INC     DPTR
+000C E9                MOV     A,R1
+000D F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 42
+                                           ; SOURCE LINE # 45
+000E 120000      R     LCALL   I2CStart
+                                           ; SOURCE LINE # 46
+0011 E4                CLR     A
+0012 900000      R     MOV     DPTR,#nBitCunt
+0015 F0                MOVX    @DPTR,A
+0016         ?C0005:
+0016 900000      R     MOV     DPTR,#nBitCunt
+0019 E0                MOVX    A,@DPTR
+001A C3                CLR     C
+001B 9408              SUBB    A,#08H
+001D 7480              MOV     A,#080H
+001F 9480              SUBB    A,#080H
+0021 5025              JNC     ?C0006
+                                           ; SOURCE LINE # 47
+0023 E0                MOVX    A,@DPTR
+0024 900000      R     MOV     DPTR,#nPwrDevice
+0027 93                MOVC    A,@A+DPTR
+0028 FF                MOV     R7,A
+0029 900000      R     MOV     DPTR,#nDeviceAddr
+002C E0                MOVX    A,@DPTR
+002D 5F                ANL     A,R7
+002E 6004              JZ      ?C0008
+                                           ; SOURCE LINE # 48
+0030 D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 49
+0032 8002              SJMP    ?C0009
+0034         ?C0008:
+                                           ; SOURCE LINE # 51
+                                           ; SOURCE LINE # 52
+0034 C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 53
+0036         ?C0009:
+                                           ; SOURCE LINE # 55
+0036 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 56
+0039 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 57
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 8   
+
+003B 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 58
+003E C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 59
+0040 900000      R     MOV     DPTR,#nBitCunt
+0043 E0                MOVX    A,@DPTR
+0044 04                INC     A
+0045 F0                MOVX    @DPTR,A
+0046 80CE              SJMP    ?C0005
+0048         ?C0006:
+                                           ; SOURCE LINE # 61
+0048 120000      R     LCALL   I2CDeviceAck
+                                           ; SOURCE LINE # 62
+004B E4                CLR     A
+004C 900000      R     MOV     DPTR,#nCunt
+004F F0                MOVX    @DPTR,A
+0050         ?C0010:
+0050 900000      R     MOV     DPTR,#nDataCunt
+0053 E0                MOVX    A,@DPTR
+0054 FF                MOV     R7,A
+0055 A3                INC     DPTR
+0056 E0                MOVX    A,@DPTR
+0057 C3                CLR     C
+0058 9F                SUBB    A,R7
+0059 5056              JNC     ?C0011
+                                           ; SOURCE LINE # 63
+005B E4                CLR     A
+005C A3                INC     DPTR
+005D F0                MOVX    @DPTR,A
+005E         ?C0013:
+005E 900000      R     MOV     DPTR,#nBitCunt
+0061 E0                MOVX    A,@DPTR
+0062 C3                CLR     C
+0063 9408              SUBB    A,#08H
+0065 7480              MOV     A,#080H
+0067 9480              SUBB    A,#080H
+0069 503B              JNC     ?C0014
+                                           ; SOURCE LINE # 64
+006B 900000      R     MOV     DPTR,#nData
+006E E0                MOVX    A,@DPTR
+006F FB                MOV     R3,A
+0070 A3                INC     DPTR
+0071 E0                MOVX    A,@DPTR
+0072 FA                MOV     R2,A
+0073 A3                INC     DPTR
+0074 E0                MOVX    A,@DPTR
+0075 F9                MOV     R1,A
+0076 900000      R     MOV     DPTR,#nCunt
+0079 E0                MOVX    A,@DPTR
+007A F582              MOV     DPL,A
+007C 758300            MOV     DPH,#00H
+007F 120000      E     LCALL   ?C?CLDOPTR
+0082 FF                MOV     R7,A
+0083 900000      R     MOV     DPTR,#nBitCunt
+0086 E0                MOVX    A,@DPTR
+0087 900000      R     MOV     DPTR,#nPwrDevice
+008A 93                MOVC    A,@A+DPTR
+008B 5F                ANL     A,R7
+008C 6004              JZ      ?C0016
+                                           ; SOURCE LINE # 65
+008E D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 66
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 9   
+
+0090 8002              SJMP    ?C0017
+0092         ?C0016:
+                                           ; SOURCE LINE # 68
+                                           ; SOURCE LINE # 69
+0092 C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 70
+0094         ?C0017:
+                                           ; SOURCE LINE # 72
+0094 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 73
+0097 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 74
+0099 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 75
+009C C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 76
+009E 900000      R     MOV     DPTR,#nBitCunt
+00A1 E0                MOVX    A,@DPTR
+00A2 04                INC     A
+00A3 F0                MOVX    @DPTR,A
+00A4 80B8              SJMP    ?C0013
+00A6         ?C0014:
+                                           ; SOURCE LINE # 78
+00A6 120000      R     LCALL   I2CDeviceAck
+                                           ; SOURCE LINE # 79
+00A9 900000      R     MOV     DPTR,#nCunt
+00AC E0                MOVX    A,@DPTR
+00AD 04                INC     A
+00AE F0                MOVX    @DPTR,A
+00AF 809F              SJMP    ?C0010
+00B1         ?C0011:
+                                           ; SOURCE LINE # 81
+00B1 120000      R     LCALL   I2CStop
+                                           ; SOURCE LINE # 82
+00B4 22                RET     
+             ; FUNCTION _I2CWriteDataToDevice (END)
+
+             ; FUNCTION _ReadDataFromADS1100 (BEGIN)
+                                           ; SOURCE LINE # 84
+0000 900000      R     MOV     DPTR,#nReadData
+0003 EB                MOV     A,R3
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EA                MOV     A,R2
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 E9                MOV     A,R1
+000A F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 85
+                                           ; SOURCE LINE # 88
+;---- Variable 'nDataCunt' assigned to Register 'R7' ----
+000B E4                CLR     A
+000C FF                MOV     R7,A
+000D         ?C0019:
+000D EF                MOV     A,R7
+000E C3                CLR     C
+000F 9403              SUBB    A,#03H
+0011 7480              MOV     A,#080H
+0013 9480              SUBB    A,#080H
+0015 5017              JNC     ?C0020
+                                           ; SOURCE LINE # 89
+0017 900000      R     MOV     DPTR,#nReadData
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 10  
+
+001A E0                MOVX    A,@DPTR
+001B FB                MOV     R3,A
+001C A3                INC     DPTR
+001D E0                MOVX    A,@DPTR
+001E FA                MOV     R2,A
+001F A3                INC     DPTR
+0020 E0                MOVX    A,@DPTR
+0021 F9                MOV     R1,A
+0022 8F82              MOV     DPL,R7
+0024 758300            MOV     DPH,#00H
+0027 E4                CLR     A
+0028 120000      E     LCALL   ?C?CSTOPTR
+                                           ; SOURCE LINE # 90
+002B 0F                INC     R7
+002C 80DF              SJMP    ?C0019
+002E         ?C0020:
+                                           ; SOURCE LINE # 92
+002E 900000      R     MOV     DPTR,#nAds100Addr
+0031 7491              MOV     A,#091H
+0033 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 93
+0034 120000      R     LCALL   I2CStart
+                                           ; SOURCE LINE # 94
+0037 E4                CLR     A
+0038 900000      R     MOV     DPTR,#nBitCunt
+003B F0                MOVX    @DPTR,A
+003C         ?C0022:
+003C 900000      R     MOV     DPTR,#nBitCunt
+003F E0                MOVX    A,@DPTR
+0040 C3                CLR     C
+0041 9408              SUBB    A,#08H
+0043 7480              MOV     A,#080H
+0045 9480              SUBB    A,#080H
+0047 5025              JNC     ?C0023
+                                           ; SOURCE LINE # 95
+0049 E0                MOVX    A,@DPTR
+004A 900000      R     MOV     DPTR,#nPwrDevice
+004D 93                MOVC    A,@A+DPTR
+004E FF                MOV     R7,A
+004F 900000      R     MOV     DPTR,#nAds100Addr
+0052 E0                MOVX    A,@DPTR
+0053 5F                ANL     A,R7
+0054 6004              JZ      ?C0025
+                                           ; SOURCE LINE # 96
+0056 D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 97
+0058 8002              SJMP    ?C0026
+005A         ?C0025:
+                                           ; SOURCE LINE # 99
+                                           ; SOURCE LINE # 100
+005A C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 101
+005C         ?C0026:
+                                           ; SOURCE LINE # 103
+005C 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 104
+005F D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 105
+0061 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 106
+0064 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 107
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 11  
+
+0066 900000      R     MOV     DPTR,#nBitCunt
+0069 E0                MOVX    A,@DPTR
+006A 04                INC     A
+006B F0                MOVX    @DPTR,A
+006C 80CE              SJMP    ?C0022
+006E         ?C0023:
+                                           ; SOURCE LINE # 109
+006E 120000      R     LCALL   I2CDeviceAck
+                                           ; SOURCE LINE # 110
+0071 E4                CLR     A
+0072 900000      R     MOV     DPTR,#nBitCunt
+0075 F0                MOVX    @DPTR,A
+0076         ?C0027:
+0076 900000      R     MOV     DPTR,#nBitCunt
+0079 E0                MOVX    A,@DPTR
+007A C3                CLR     C
+007B 9408              SUBB    A,#08H
+007D 7480              MOV     A,#080H
+007F 9480              SUBB    A,#080H
+0081 5043              JNC     ?C0028
+                                           ; SOURCE LINE # 111
+0083 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 112
+0086 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 113
+0088 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 114
+008B 30801D            JNB     NewPower_SDA,?C0030
+                                           ; SOURCE LINE # 115
+008E 900000      R     MOV     DPTR,#nReadData
+0091 E0                MOVX    A,@DPTR
+0092 FB                MOV     R3,A
+0093 A3                INC     DPTR
+0094 E0                MOVX    A,@DPTR
+0095 FA                MOV     R2,A
+0096 A3                INC     DPTR
+0097 E0                MOVX    A,@DPTR
+0098 F9                MOV     R1,A
+0099 120000      E     LCALL   ?C?CLDPTR
+009C FF                MOV     R7,A
+009D 900000      R     MOV     DPTR,#nBitCunt
+00A0 E0                MOVX    A,@DPTR
+00A1 900000      R     MOV     DPTR,#nPwrDevice
+00A4 93                MOVC    A,@A+DPTR
+00A5 4F                ORL     A,R7
+00A6 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 116
+00A9 8011              SJMP    ?C0031
+00AB         ?C0030:
+                                           ; SOURCE LINE # 118
+                                           ; SOURCE LINE # 119
+00AB 900000      R     MOV     DPTR,#nReadData
+00AE E0                MOVX    A,@DPTR
+00AF FB                MOV     R3,A
+00B0 A3                INC     DPTR
+00B1 E0                MOVX    A,@DPTR
+00B2 FA                MOV     R2,A
+00B3 A3                INC     DPTR
+00B4 E0                MOVX    A,@DPTR
+00B5 F9                MOV     R1,A
+00B6 120000      E     LCALL   ?C?CLDPTR
+00B9 120000      E     LCALL   ?C?CSTPTR
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 12  
+
+                                           ; SOURCE LINE # 120
+00BC         ?C0031:
+                                           ; SOURCE LINE # 122
+00BC C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 123
+00BE 900000      R     MOV     DPTR,#nBitCunt
+00C1 E0                MOVX    A,@DPTR
+00C2 04                INC     A
+00C3 F0                MOVX    @DPTR,A
+00C4 80B0              SJMP    ?C0027
+00C6         ?C0028:
+                                           ; SOURCE LINE # 125
+00C6 C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 126
+00C8 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 127
+00CB D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 128
+00CD 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 130
+00D0 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 131
+00D2 D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 132
+00D4 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 133
+00D7 E4                CLR     A
+00D8 900000      R     MOV     DPTR,#nBitCunt
+00DB F0                MOVX    @DPTR,A
+00DC         ?C0032:
+00DC 900000      R     MOV     DPTR,#nBitCunt
+00DF E0                MOVX    A,@DPTR
+00E0 C3                CLR     C
+00E1 9408              SUBB    A,#08H
+00E3 7480              MOV     A,#080H
+00E5 9480              SUBB    A,#080H
+00E7 5055              JNC     ?C0033
+                                           ; SOURCE LINE # 134
+00E9 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 135
+00EB 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 136
+00EE 308022            JNB     NewPower_SDA,?C0035
+                                           ; SOURCE LINE # 137
+00F1 900000      R     MOV     DPTR,#nReadData
+00F4 E0                MOVX    A,@DPTR
+00F5 FB                MOV     R3,A
+00F6 A3                INC     DPTR
+00F7 E0                MOVX    A,@DPTR
+00F8 FA                MOV     R2,A
+00F9 A3                INC     DPTR
+00FA E0                MOVX    A,@DPTR
+00FB 2401              ADD     A,#01H
+00FD F9                MOV     R1,A
+00FE E4                CLR     A
+00FF 3A                ADDC    A,R2
+0100 FA                MOV     R2,A
+0101 120000      E     LCALL   ?C?CLDPTR
+0104 FF                MOV     R7,A
+0105 900000      R     MOV     DPTR,#nBitCunt
+0108 E0                MOVX    A,@DPTR
+0109 900000      R     MOV     DPTR,#nPwrDevice
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 13  
+
+010C 93                MOVC    A,@A+DPTR
+010D 4F                ORL     A,R7
+010E 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 138
+0111 8016              SJMP    ?C0036
+0113         ?C0035:
+                                           ; SOURCE LINE # 140
+                                           ; SOURCE LINE # 141
+0113 900000      R     MOV     DPTR,#nReadData
+0116 E0                MOVX    A,@DPTR
+0117 FB                MOV     R3,A
+0118 A3                INC     DPTR
+0119 E0                MOVX    A,@DPTR
+011A FA                MOV     R2,A
+011B A3                INC     DPTR
+011C E0                MOVX    A,@DPTR
+011D 2401              ADD     A,#01H
+011F F9                MOV     R1,A
+0120 E4                CLR     A
+0121 3A                ADDC    A,R2
+0122 FA                MOV     R2,A
+0123 120000      E     LCALL   ?C?CLDPTR
+0126 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 142
+0129         ?C0036:
+                                           ; SOURCE LINE # 144
+0129 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 145
+012B 900000      R     MOV     DPTR,#nBitCunt
+012E E0                MOVX    A,@DPTR
+012F 6407              XRL     A,#07H
+0131 6003              JZ      ?C0034
+                                           ; SOURCE LINE # 146
+0133 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 147
+                                           ; SOURCE LINE # 148
+0136         ?C0034:
+0136 900000      R     MOV     DPTR,#nBitCunt
+0139 E0                MOVX    A,@DPTR
+013A 04                INC     A
+013B F0                MOVX    @DPTR,A
+013C 809E              SJMP    ?C0032
+013E         ?C0033:
+                                           ; SOURCE LINE # 150
+013E C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 151
+0140 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 152
+0143 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 153
+0145 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 155
+0148 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 156
+014A D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 157
+014C 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 158
+014F E4                CLR     A
+0150 900000      R     MOV     DPTR,#nBitCunt
+0153 F0                MOVX    @DPTR,A
+0154         ?C0038:
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 14  
+
+0154 900000      R     MOV     DPTR,#nBitCunt
+0157 E0                MOVX    A,@DPTR
+0158 C3                CLR     C
+0159 9408              SUBB    A,#08H
+015B 7480              MOV     A,#080H
+015D 9480              SUBB    A,#080H
+015F 5055              JNC     ?C0039
+                                           ; SOURCE LINE # 159
+0161 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 160
+0163 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 161
+0166 308022            JNB     NewPower_SDA,?C0041
+                                           ; SOURCE LINE # 162
+0169 900000      R     MOV     DPTR,#nReadData
+016C E0                MOVX    A,@DPTR
+016D FB                MOV     R3,A
+016E A3                INC     DPTR
+016F E0                MOVX    A,@DPTR
+0170 FA                MOV     R2,A
+0171 A3                INC     DPTR
+0172 E0                MOVX    A,@DPTR
+0173 2402              ADD     A,#02H
+0175 F9                MOV     R1,A
+0176 E4                CLR     A
+0177 3A                ADDC    A,R2
+0178 FA                MOV     R2,A
+0179 120000      E     LCALL   ?C?CLDPTR
+017C FF                MOV     R7,A
+017D 900000      R     MOV     DPTR,#nBitCunt
+0180 E0                MOVX    A,@DPTR
+0181 900000      R     MOV     DPTR,#nPwrDevice
+0184 93                MOVC    A,@A+DPTR
+0185 4F                ORL     A,R7
+0186 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 163
+0189 8016              SJMP    ?C0042
+018B         ?C0041:
+                                           ; SOURCE LINE # 165
+                                           ; SOURCE LINE # 166
+018B 900000      R     MOV     DPTR,#nReadData
+018E E0                MOVX    A,@DPTR
+018F FB                MOV     R3,A
+0190 A3                INC     DPTR
+0191 E0                MOVX    A,@DPTR
+0192 FA                MOV     R2,A
+0193 A3                INC     DPTR
+0194 E0                MOVX    A,@DPTR
+0195 2402              ADD     A,#02H
+0197 F9                MOV     R1,A
+0198 E4                CLR     A
+0199 3A                ADDC    A,R2
+019A FA                MOV     R2,A
+019B 120000      E     LCALL   ?C?CLDPTR
+019E 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 167
+01A1         ?C0042:
+                                           ; SOURCE LINE # 169
+01A1 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 170
+01A3 900000      R     MOV     DPTR,#nBitCunt
+01A6 E0                MOVX    A,@DPTR
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 15  
+
+01A7 6407              XRL     A,#07H
+01A9 6003              JZ      ?C0040
+                                           ; SOURCE LINE # 171
+01AB 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 172
+                                           ; SOURCE LINE # 173
+01AE         ?C0040:
+01AE 900000      R     MOV     DPTR,#nBitCunt
+01B1 E0                MOVX    A,@DPTR
+01B2 04                INC     A
+01B3 F0                MOVX    @DPTR,A
+01B4 809E              SJMP    ?C0038
+01B6         ?C0039:
+                                           ; SOURCE LINE # 175
+01B6 C280              CLR     NewPower_SDA
+                                           ; SOURCE LINE # 176
+01B8 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 177
+01BB D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 178
+01BD 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 180
+01C0 C281              CLR     NewPower_SCL
+                                           ; SOURCE LINE # 181
+01C2 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 182
+01C5 D281              SETB    NewPower_SCL
+                                           ; SOURCE LINE # 183
+01C7 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 184
+01CA D280              SETB    NewPower_SDA
+                                           ; SOURCE LINE # 185
+01CC 120000      E     LCALL   Delay_5US
+                                           ; SOURCE LINE # 186
+01CF 22                RET     
+             ; FUNCTION _ReadDataFromADS1100 (END)
+
+             ; FUNCTION _WriteDataToMAX5821 (BEGIN)
+                                           ; SOURCE LINE # 188
+0000 900000      R     MOV     DPTR,#nDeviceAddr
+0003 EF                MOV     A,R7
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EB                MOV     A,R3
+0007 F0                MOVX    @DPTR,A
+;---- Variable 'nData' assigned to Register 'R4/R5' ----
+                                           ; SOURCE LINE # 189
+                                           ; SOURCE LINE # 192
+0008 900000      R     MOV     DPTR,#nWriteData+01H
+000B ED                MOV     A,R5
+000C F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 193
+000D EC                MOV     A,R4
+000E FF                MOV     R7,A
+000F 33                RLC     A
+0010 95E0              SUBB    A,ACC
+0012 EF                MOV     A,R7
+0013 44C0              ORL     A,#0C0H
+0015 900000      R     MOV     DPTR,#nWriteData
+0018 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 195
+0019 900000      R     MOV     DPTR,#nDeviceAddr
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 16  
+
+001C E0                MOVX    A,@DPTR
+001D FF                MOV     R7,A
+001E 7B01              MOV     R3,#01H
+0020 7A00        R     MOV     R2,#HIGH nWriteData
+0022 7900        R     MOV     R1,#LOW nWriteData
+0024 900000      R     MOV     DPTR,#?_I2CWriteDataToDevice?BYTE+04H
+0027 7402              MOV     A,#02H
+0029 F0                MOVX    @DPTR,A
+002A 120000      R     LCALL   _I2CWriteDataToDevice
+                                           ; SOURCE LINE # 196
+002D 900000      R     MOV     DPTR,#nDeviceAddr
+0030 E0                MOVX    A,@DPTR
+0031 FF                MOV     R7,A
+0032 7B01              MOV     R3,#01H
+0034 7A00        R     MOV     R2,#HIGH nCommand
+0036 7900        R     MOV     R1,#LOW nCommand
+0038 900000      R     MOV     DPTR,#?_I2CWriteDataToDevice?BYTE+04H
+003B 7401              MOV     A,#01H
+003D F0                MOVX    @DPTR,A
+003E 120000      R     LCALL   _I2CWriteDataToDevice
+                                           ; SOURCE LINE # 197
+0041 22                RET     
+             ; FUNCTION _WriteDataToMAX5821 (END)
+
+             ; FUNCTION _SetVoltage (BEGIN)
+                                           ; SOURCE LINE # 199
+0000 900000      R     MOV     DPTR,#fVoltage
+0003 120000      E     LCALL   ?C?LSTXDATA
+                                           ; SOURCE LINE # 200
+                                           ; SOURCE LINE # 202
+0006 900000      R     MOV     DPTR,#fVref
+0009 120000      E     LCALL   ?C?LSTKXDATA
+000C 40                DB      040H
+000D A0                DB      0A0H
+000E 00                DB      00H
+000F 00                DB      00H
+                                           ; SOURCE LINE # 205
+0010 E4                CLR     A
+0011 FF                MOV     R7,A
+0012 FE                MOV     R6,A
+0013 7D40              MOV     R5,#040H
+0015 7C40              MOV     R4,#040H
+0017 900000      R     MOV     DPTR,#fVref
+001A E0                MOVX    A,@DPTR
+001B F8                MOV     R0,A
+001C A3                INC     DPTR
+001D E0                MOVX    A,@DPTR
+001E F9                MOV     R1,A
+001F A3                INC     DPTR
+0020 E0                MOVX    A,@DPTR
+0021 FA                MOV     R2,A
+0022 A3                INC     DPTR
+0023 E0                MOVX    A,@DPTR
+0024 FB                MOV     R3,A
+0025 120000      E     LCALL   ?C?FPMUL
+0028 C004              PUSH    AR4
+002A C005              PUSH    AR5
+002C C006              PUSH    AR6
+002E C007              PUSH    AR7
+0030 E4                CLR     A
+0031 FF                MOV     R7,A
+0032 FE                MOV     R6,A
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 17  
+
+0033 7D80              MOV     R5,#080H
+0035 7C45              MOV     R4,#045H
+0037 900000      R     MOV     DPTR,#fVoltage
+003A E0                MOVX    A,@DPTR
+003B F8                MOV     R0,A
+003C A3                INC     DPTR
+003D E0                MOVX    A,@DPTR
+003E F9                MOV     R1,A
+003F A3                INC     DPTR
+0040 E0                MOVX    A,@DPTR
+0041 FA                MOV     R2,A
+0042 A3                INC     DPTR
+0043 E0                MOVX    A,@DPTR
+0044 FB                MOV     R3,A
+0045 120000      E     LCALL   ?C?FPMUL
+0048 D003              POP     AR3
+004A D002              POP     AR2
+004C D001              POP     AR1
+004E D000              POP     AR0
+0050 120000      E     LCALL   ?C?FPDIV
+0053 120000      E     LCALL   ?C?CASTF
+;---- Variable 'nDigtal' assigned to Register 'R6/R7' ----
+                                           ; SOURCE LINE # 206
+0056 AD07              MOV     R5,AR7
+0058 AC06              MOV     R4,AR6
+005A 7B40              MOV     R3,#040H
+005C 7F20              MOV     R7,#020H
+005E 120000      R     LCALL   _WriteDataToMAX5821
+                                           ; SOURCE LINE # 207
+0061 22                RET     
+             ; FUNCTION _SetVoltage (END)
+
+             ; FUNCTION _ReadOPA544OutputCurrent (BEGIN)
+                                           ; SOURCE LINE # 209
+0000 900000      R     MOV     DPTR,#nAds1100Gain
+0003 EF                MOV     A,R7
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 ED                MOV     A,R5
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 EB                MOV     A,R3
+000A F0                MOVX    @DPTR,A
+000B A3                INC     DPTR
+000C EA                MOV     A,R2
+000D F0                MOVX    @DPTR,A
+000E A3                INC     DPTR
+000F E9                MOV     A,R1
+0010 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 210
+                                           ; SOURCE LINE # 212
+0011 E4                CLR     A
+0012 900000      R     MOV     DPTR,#nAds100OutData
+0015 F0                MOVX    @DPTR,A
+0016 A3                INC     DPTR
+0017 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 213
+0018 A3                INC     DPTR
+0019 120000      E     LCALL   ?C?LSTKXDATA
+001C 00                DB      00H
+001D 00                DB      00H
+001E 00                DB      00H
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 18  
+
+001F 00                DB      00H
+0020 900000      R     MOV     DPTR,#fVref
+0023 120000      E     LCALL   ?C?LSTKXDATA
+0026 40                DB      040H
+0027 A0                DB      0A0H
+0028 00                DB      00H
+0029 00                DB      00H
+002A 900000      R     MOV     DPTR,#fRSample
+002D 120000      E     LCALL   ?C?LSTKXDATA
+0030 3F                DB      03FH
+0031 00                DB      00H
+0032 00                DB      00H
+0033 00                DB      00H
+                                           ; SOURCE LINE # 215
+0034 900000      R     MOV     DPTR,#fIccurent
+0037 E0                MOVX    A,@DPTR
+0038 FB                MOV     R3,A
+0039 A3                INC     DPTR
+003A E0                MOVX    A,@DPTR
+003B FA                MOV     R2,A
+003C A3                INC     DPTR
+003D E0                MOVX    A,@DPTR
+003E F9                MOV     R1,A
+003F 120000      E     LCALL   ?C?LSTKPTR
+0042 00                DB      00H
+0043 00                DB      00H
+0044 00                DB      00H
+0045 00                DB      00H
+                                           ; SOURCE LINE # 216
+0046 900000      R     MOV     DPTR,#nAds1100Gain
+0049 E0                MOVX    A,@DPTR
+004A 700A              JNZ     ?C0047
+                                           ; SOURCE LINE # 217
+004C 900000      R     MOV     DPTR,#fIccGain
+004F 120000      E     LCALL   ?C?LSTKXDATA
+0052 40                DB      040H
+0053 00                DB      00H
+0054 00                DB      00H
+0055 00                DB      00H
+                                           ; SOURCE LINE # 218
+0056         ?C0047:
+                                           ; SOURCE LINE # 220
+0056 900000      R     MOV     DPTR,#nAds1100Gain
+0059 E0                MOVX    A,@DPTR
+005A 6401              XRL     A,#01H
+005C 700A              JNZ     ?C0048
+                                           ; SOURCE LINE # 221
+005E 900000      R     MOV     DPTR,#fIccGain
+0061 120000      E     LCALL   ?C?LSTKXDATA
+0064 40                DB      040H
+0065 80                DB      080H
+0066 00                DB      00H
+0067 00                DB      00H
+                                           ; SOURCE LINE # 222
+0068         ?C0048:
+                                           ; SOURCE LINE # 224
+0068 900000      R     MOV     DPTR,#nAds1100Gain
+006B E0                MOVX    A,@DPTR
+006C 6402              XRL     A,#02H
+006E 700A              JNZ     ?C0049
+                                           ; SOURCE LINE # 225
+0070 900000      R     MOV     DPTR,#fIccGain
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 19  
+
+0073 120000      E     LCALL   ?C?LSTKXDATA
+0076 41                DB      041H
+0077 00                DB      00H
+0078 00                DB      00H
+0079 00                DB      00H
+                                           ; SOURCE LINE # 226
+007A         ?C0049:
+                                           ; SOURCE LINE # 228
+007A 900000      R     MOV     DPTR,#nAds1100Gain
+007D E0                MOVX    A,@DPTR
+007E 6403              XRL     A,#03H
+0080 700A              JNZ     ?C0050
+                                           ; SOURCE LINE # 229
+0082 900000      R     MOV     DPTR,#fIccGain
+0085 120000      E     LCALL   ?C?LSTKXDATA
+0088 41                DB      041H
+0089 80                DB      080H
+008A 00                DB      00H
+008B 00                DB      00H
+                                           ; SOURCE LINE # 230
+008C         ?C0050:
+                                           ; SOURCE LINE # 232
+008C 900000      R     MOV     DPTR,#nAds1100Gain
+008F E0                MOVX    A,@DPTR
+0090 441C              ORL     A,#01CH
+0092 900000      R     MOV     DPTR,#nConfigureData
+0095 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 233
+0096 7B01              MOV     R3,#01H
+0098 7A00        R     MOV     R2,#HIGH nConfigureData
+009A 7900        R     MOV     R1,#LOW nConfigureData
+009C 900000      R     MOV     DPTR,#?_I2CWriteDataToDevice?BYTE+04H
+009F 7401              MOV     A,#01H
+00A1 F0                MOVX    @DPTR,A
+00A2 7F90              MOV     R7,#090H
+00A4 120000      R     LCALL   _I2CWriteDataToDevice
+                                           ; SOURCE LINE # 234
+00A7 7F01              MOV     R7,#01H
+00A9 7E00              MOV     R6,#00H
+00AB 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 235
+00AE 900000      R     MOV     DPTR,#nAds1100Gain
+00B1 E0                MOVX    A,@DPTR
+00B2 449C              ORL     A,#09CH
+00B4 900000      R     MOV     DPTR,#nConfigureData
+00B7 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 236
+00B8 E4                CLR     A
+00B9 A3                INC     DPTR
+00BA F0                MOVX    @DPTR,A
+00BB         ?C0051:
+00BB 900000      R     MOV     DPTR,#nSampleCunt
+00BE E0                MOVX    A,@DPTR
+00BF FF                MOV     R7,A
+00C0 900000      R     MOV     DPTR,#nReadDataCunt
+00C3 E0                MOVX    A,@DPTR
+00C4 C3                CLR     C
+00C5 9F                SUBB    A,R7
+00C6 4003              JC      $ + 5H
+00C8 020000      R     LJMP    ?C0058
+                                           ; SOURCE LINE # 237
+00CB 7B01              MOV     R3,#01H
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 20  
+
+00CD 7A00        R     MOV     R2,#HIGH nConfigureData
+00CF 7900        R     MOV     R1,#LOW nConfigureData
+00D1 900000      R     MOV     DPTR,#?_I2CWriteDataToDevice?BYTE+04H
+00D4 7401              MOV     A,#01H
+00D6 F0                MOVX    @DPTR,A
+00D7 7F90              MOV     R7,#090H
+00D9 120000      R     LCALL   _I2CWriteDataToDevice
+00DC         ?C0054:
+                                           ; SOURCE LINE # 238
+                                           ; SOURCE LINE # 239
+00DC 7B01              MOV     R3,#01H
+00DE 7A00        R     MOV     R2,#HIGH nReadData
+00E0 7900        R     MOV     R1,#LOW nReadData
+00E2 120000      R     LCALL   _ReadDataFromADS1100
+                                           ; SOURCE LINE # 240
+00E5 900000      R     MOV     DPTR,#nReadData+02H
+00E8 E0                MOVX    A,@DPTR
+00E9 30E709            JNB     ACC.7,?C0055
+                                           ; SOURCE LINE # 241
+                                           ; SOURCE LINE # 242
+                                           ; SOURCE LINE # 244
+                                           ; SOURCE LINE # 245
+00EC 7F01              MOV     R7,#01H
+00EE 7E00              MOV     R6,#00H
+00F0 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 246
+                                           ; SOURCE LINE # 247
+00F3 80E7              SJMP    ?C0054
+00F5         ?C0055:
+                                           ; SOURCE LINE # 249
+00F5 7B01              MOV     R3,#01H
+00F7 7A00        R     MOV     R2,#HIGH nReadData
+00F9 7900        R     MOV     R1,#LOW nReadData
+00FB 120000      R     LCALL   _ReadDataFromADS1100
+                                           ; SOURCE LINE # 251
+00FE 900000      R     MOV     DPTR,#nReadData
+0101 E0                MOVX    A,@DPTR
+0102 FF                MOV     R7,A
+0103 900000      R     MOV     DPTR,#nAds100OutData
+0106 E4                CLR     A
+0107 F0                MOVX    @DPTR,A
+0108 A3                INC     DPTR
+0109 EF                MOV     A,R7
+010A F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 252
+010B E0                MOVX    A,@DPTR
+010C F8                MOV     R0,A
+010D E4                CLR     A
+010E F0                MOVX    @DPTR,A
+010F E8                MOV     A,R0
+0110 900000      R     MOV     DPTR,#nAds100OutData
+0113 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 253
+0114 900000      R     MOV     DPTR,#nReadData+01H
+0117 E0                MOVX    A,@DPTR
+0118 FF                MOV     R7,A
+0119 900000      R     MOV     DPTR,#nAds100OutData
+011C E0                MOVX    A,@DPTR
+011D F0                MOVX    @DPTR,A
+011E A3                INC     DPTR
+011F E0                MOVX    A,@DPTR
+0120 4F                ORL     A,R7
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 21  
+
+0121 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 255
+0122 900000      R     MOV     DPTR,#nAds100OutData
+0125 E0                MOVX    A,@DPTR
+0126 FC                MOV     R4,A
+0127 A3                INC     DPTR
+0128 E0                MOVX    A,@DPTR
+0129 FD                MOV     R5,A
+012A EC                MOV     A,R4
+012B 120000      E     LCALL   ?C?FCASTI
+012E 900000      R     MOV     DPTR,#fVref
+0131 E0                MOVX    A,@DPTR
+0132 F8                MOV     R0,A
+0133 A3                INC     DPTR
+0134 E0                MOVX    A,@DPTR
+0135 F9                MOV     R1,A
+0136 A3                INC     DPTR
+0137 E0                MOVX    A,@DPTR
+0138 FA                MOV     R2,A
+0139 A3                INC     DPTR
+013A E0                MOVX    A,@DPTR
+013B FB                MOV     R3,A
+013C 120000      E     LCALL   ?C?FPMUL
+013F C004              PUSH    AR4
+0141 C005              PUSH    AR5
+0143 C006              PUSH    AR6
+0145 C007              PUSH    AR7
+0147 E4                CLR     A
+0148 FF                MOV     R7,A
+0149 FE                MOV     R6,A
+014A FD                MOV     R5,A
+014B 7C47              MOV     R4,#047H
+014D 900000      R     MOV     DPTR,#fIccGain
+0150 E0                MOVX    A,@DPTR
+0151 F8                MOV     R0,A
+0152 A3                INC     DPTR
+0153 E0                MOVX    A,@DPTR
+0154 F9                MOV     R1,A
+0155 A3                INC     DPTR
+0156 E0                MOVX    A,@DPTR
+0157 FA                MOV     R2,A
+0158 A3                INC     DPTR
+0159 E0                MOVX    A,@DPTR
+015A FB                MOV     R3,A
+015B 120000      E     LCALL   ?C?FPMUL
+015E A804              MOV     R0,AR4
+0160 A905              MOV     R1,AR5
+0162 AA06              MOV     R2,AR6
+0164 AB07              MOV     R3,AR7
+0166 D007              POP     AR7
+0168 D006              POP     AR6
+016A D005              POP     AR5
+016C D004              POP     AR4
+016E 120000      E     LCALL   ?C?FPDIV
+0171 900000      R     MOV     DPTR,#fRSample
+0174 E0                MOVX    A,@DPTR
+0175 F8                MOV     R0,A
+0176 A3                INC     DPTR
+0177 E0                MOVX    A,@DPTR
+0178 F9                MOV     R1,A
+0179 A3                INC     DPTR
+017A E0                MOVX    A,@DPTR
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 22  
+
+017B FA                MOV     R2,A
+017C A3                INC     DPTR
+017D E0                MOVX    A,@DPTR
+017E FB                MOV     R3,A
+017F 120000      E     LCALL   ?C?FPDIV
+0182 900000      R     MOV     DPTR,#fIcc
+0185 120000      E     LCALL   ?C?LSTXDATA
+                                           ; SOURCE LINE # 256
+0188 900000      R     MOV     DPTR,#fIccurent
+018B E0                MOVX    A,@DPTR
+018C FB                MOV     R3,A
+018D A3                INC     DPTR
+018E E0                MOVX    A,@DPTR
+018F FA                MOV     R2,A
+0190 A3                INC     DPTR
+0191 E0                MOVX    A,@DPTR
+0192 F9                MOV     R1,A
+0193 C003              PUSH    AR3
+0195 C002              PUSH    AR2
+0197 C001              PUSH    AR1
+0199 120000      E     LCALL   ?C?LLDPTR
+019C C004              PUSH    AR4
+019E C005              PUSH    AR5
+01A0 C006              PUSH    AR6
+01A2 C007              PUSH    AR7
+01A4 900000      R     MOV     DPTR,#nSampleCunt
+01A7 E0                MOVX    A,@DPTR
+01A8 FC                MOV     R4,A
+01A9 E4                CLR     A
+01AA 120000      E     LCALL   ?C?FCASTC
+01AD A804              MOV     R0,AR4
+01AF A905              MOV     R1,AR5
+01B1 AA06              MOV     R2,AR6
+01B3 AB07              MOV     R3,AR7
+01B5 900000      R     MOV     DPTR,#fIcc
+01B8 E0                MOVX    A,@DPTR
+01B9 FC                MOV     R4,A
+01BA A3                INC     DPTR
+01BB E0                MOVX    A,@DPTR
+01BC FD                MOV     R5,A
+01BD A3                INC     DPTR
+01BE E0                MOVX    A,@DPTR
+01BF FE                MOV     R6,A
+01C0 A3                INC     DPTR
+01C1 E0                MOVX    A,@DPTR
+01C2 FF                MOV     R7,A
+01C3 120000      E     LCALL   ?C?FPDIV
+01C6 A804              MOV     R0,AR4
+01C8 A905              MOV     R1,AR5
+01CA AA06              MOV     R2,AR6
+01CC AB07              MOV     R3,AR7
+01CE D007              POP     AR7
+01D0 D006              POP     AR6
+01D2 D005              POP     AR5
+01D4 D004              POP     AR4
+01D6 120000      E     LCALL   ?C?FPADD
+01D9 D001              POP     AR1
+01DB D002              POP     AR2
+01DD D003              POP     AR3
+01DF 120000      E     LCALL   ?C?LSTPTR
+                                           ; SOURCE LINE # 257
+01E2 900000      R     MOV     DPTR,#nReadDataCunt
+C51 COMPILER V9.60.0.0   NEWPOWER                                                          05/05/2023 15:28:50 PAGE 23  
+
+01E5 E0                MOVX    A,@DPTR
+01E6 04                INC     A
+01E7 F0                MOVX    @DPTR,A
+01E8 020000      R     LJMP    ?C0051
+                                           ; SOURCE LINE # 258
+01EB         ?C0058:
+01EB 22                RET     
+             ; FUNCTION _ReadOPA544OutputCurrent (END)
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1356    ----
+   CONSTANT SIZE    =      8    ----
+   XDATA SIZE       =   ----      52
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

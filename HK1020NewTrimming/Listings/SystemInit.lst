@@ -1,0 +1,98 @@
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        04/12/2023 14:03:55 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SYSTEMINIT
+OBJECT MODULE PLACED IN .\Objects\SystemInit.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE SystemInit.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND PRI
+                    -NT(.\Listings\SystemInit.lst) TABS(2) OBJECT(.\Objects\SystemInit.obj)
+
+line level    source
+
+   1          #include <SystemInit.h>
+   2          #include <DelayTime.h>
+   3          #include <intrins.h>
+   4          
+   5          bit bRunStopFlag = 0x00;
+   6          bit bStartFlag = 0x00;
+   7          
+   8          extern bit bBoardIsHere,bTestEndFlag;
+   9          
+  10          void SystemInit(void)
+  11          {
+  12   1        P_SW2 |= 0x80; // EAXFR = 1,才可以访问位于外部RAM区的特殊功能寄存器
+  13   1        XOSCCR = 0xc0; // 外部晶振控制器，bit7 = 1 使能外部晶振，bit6 = 1 外部时钟源为晶体
+             -振荡器，晶振连接到P1.7和P1.6
+  14   1        while(!(XOSCCR & 0x01)); // 等待外部晶振稳定
+  15   1        CLKDIV = 0x00; // 系统时钟分频寄存器，0x00代表不分频
+  16   1        CKSEL = 0x01;  // 系统时钟选择控制寄存器，0x01选择外部晶振
+  17   1        P_SW2 = 0x00;
+  18   1        
+  19   1        P0 =  0x00; 
+  20   1        P1 &= 0xc0;
+  21   1        P2 =  0x00;
+  22   1        P4 &= 0xe0;
+  23   1        P5 &= 0xe0;
+  24   1        P6 =  0x00;
+  25   1        P7 =  0x00;
+  26   1        
+  27   1        P3M0 |= 0x02;
+  28   1        P3M1 &= 0xfd; // P3.1需要强推，见芯片说明,P34-P37做power驱动用了，需要强推
+  29   1      
+  30   1      
+  31   1        IT0 = 0x01; // INT0 仅下降沿中断
+  32   1        IT1 = 0x01; // INT1 仅下降沿中断
+  33   1        
+  34   1        P_SW1 = 0x00; //RxD = P3.0,TxD = P3.1
+  35   1        
+  36   1        EX0 = 0x00;
+  37   1        EX1 = 0x00;
+  38   1        ES = 0x00;
+  39   1        EA = 0x01;
+  40   1        
+  41   1        bBoardIsHere = 0x00;
+  42   1        bTestEndFlag = 0x00;
+  43   1        bRunStopFlag = 0x00;
+  44   1        bStartFlag = 0x00;
+  45   1      }
+  46          
+  47          void Ext1Interrupt() interrupt 2 using 1  
+  48          {
+  49   1        EX1 = 0x00;                        
+  50   1        while(1)
+  51   1        { 
+  52   2          if(DataCollect)
+  53   2          {
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        04/12/2023 14:03:55 PAGE 2   
+
+  54   3            bRunStopFlag = 0x01;
+  55   3            break;
+  56   3          }
+  57   2        }
+  58   1      }
+  59          
+  60          void Ext0Interrupt() interrupt 0 using 1  
+  61          {
+  62   1        EX0 = 0x00;                        
+  63   1        while(1)
+  64   1        { 
+  65   2          if(ScanStart)
+  66   2          {
+  67   3            bStartFlag = 0x01;
+  68   3            break;
+  69   3          }
+  70   2        }
+  71   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     91    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

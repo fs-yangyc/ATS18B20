@@ -1,0 +1,1625 @@
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE CH395CMD
+OBJECT MODULE PLACED IN .\Objects\CH395CMD.obj
+COMPILER INVOKED BY: D:\WorkSoftware\Keil5_C51\C51\BIN\C51.EXE CH395CMD.C LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXT
+                    -END CODE PRINT(.\Listings\CH395CMD.lst) TABS(2) OBJECT(.\Objects\CH395CMD.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2          * Description: CH395Ð¾Æ¬ÃüÁî½Ó¿Ú¼°ÓëLabEventÎÂÏäÍ¨Ñ¶ÎÄ¼þ                      
+   3          *******************************************************************************/
+   4          
+   5          /* Í·ÎÄ¼þ°üº¬*/
+   6          #include "CH395INC.H"
+   7          #include "ch395cmd.h"
+   8          #include <pc.h>
+   9          #include <string.h>
+  10          #include <stdio.h>
+  11          #include <stdlib.h>
+  12          #include <DelayTime.h>
+  13          #include <SystemInit.h>
+  14          
+  15          /* ³£ÓÃ±äÁ¿¶¨Òå */      
+  16          xdata struct CH395_SYS CH395Inf;                 //CH395µÄÅäÖÃÐÅÏ¢
+  17          xdata struct SOCK_INF  ScokInf[1];               //Socket 0 µÄÅäÖÃÐÅÏ¢ 
+  18          
+  19          extern unsigned char xdata print_data[80];       //from cfguo.c,·¢ËÍµ½×ÀÃæµÄ×Ö·û´®
+  20          unsigned char xdata MyBuffer[50];                //½ÓÊÕÊý¾Ý»º³åÇø   
+  21          unsigned char xdata ChamberCMDData[53];          //·¢¸øÎÂÏäµÄ×Ö·ûÃüÁî
+  22          unsigned char xdata TCP_connect_falg;            //TCPÁ¬½Ó±êÖ¾£¬1±íÊ¾TCPÁ¬½Ó£¬0±íÊ¾TCP¶Ï¿ª
+  23          unsigned char xdata TCP_timeout_flag;            //TCPÁ¬½Ó³¬Ê±±êÖ¾
+  24          unsigned char xdata rev_over_flag;               //½ÓÊÕÊý¾ÝÍê³É±êÖ¾
+  25          //unsigned char xdata socket_state[2];           //SocketµÄ×´Ì¬
+  26          unsigned char xdata TCP_timeout_cunt;            //TCP³¬Ê±´ÎÊý
+  27          unsigned long xdata func_para;                   //CH395¹¦ÄÜ²ÎÊý
+  28          
+  29          /* CH395Ïà¹Ø¶¨Òå */
+  30          //unsigned char code CH395MACAddr[6] = {0x02,0x03,0x04,0x05,0x06,0x07}; /* CH395MACµØÖ· */
+  31          unsigned char code CH395IPAddr[4]   = {192,168,1,100};                    /* CH395IPµØÖ· */
+  32          unsigned char code CH395GWIPAddr[4] = {192,168,1,1};                    /* CH395Íø¹Ø */
+  33          unsigned char code CH395IPMask[4]   = {255,255,255,0};                  /* CH395×ÓÍøÑÚÂë */
+  34          
+  35          /* socket Ïà¹Ø¶¨Òå*/
+  36          unsigned char  code Socket0DesIP[4] = {192,168,1,64};                   /* Socket 0Ä¿µÄIPµØÖ· */
+  37          unsigned short code Socket0DesPort  = 2049;                             /* Socket 0Ä¿µÄ¶Ë¿Ú */
+  38          unsigned short code Socket0SourPort = 8000;                             /* Socket 0Ô´¶Ë¿Ú */
+  39          
+  40          /*======È«¾Ö±äÁ¿³õÊ¼»¯===========================================================*/
+  41          void CH395_LabCham_Vari_Init()
+  42          { 
+  43   1        TCP_connect_falg = 0;
+  44   1        TCP_timeout_flag = 0;
+  45   1        rev_over_flag    = 0;
+  46   1        TCP_timeout_cunt = 0;
+  47   1        func_para        = 0x00000004;         //bit2Îª1£¬±íÊ¾CH395µÍÄÜºÄÄ£Ê½Ê¹ÄÜ
+  48   1        memset(print_data,'\0',sizeof(print_data));
+  49   1        memset(ChamberCMDData,'\0',sizeof(ChamberCMDData));
+  50   1      }
+  51          /*==============================================================================
+  52          * Function Name  : mStopIfError
+  53          * Description    : µ÷ÊÔÊ¹ÓÃ£¬ÏÔÊ¾´íÎó´úÂë£¬²¢Í£»ú
+  54          * Input          : iError   ´íÎó´úÂë
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 2   
+
+  55          * Output         : None
+  56          * Return         : None
+  57          ==============================================================================*/
+  58          void mStopIfError(unsigned char iError)
+  59          {
+  60   1          if (iError == CMD_ERR_SUCCESS) return;              /* ²Ù×÷³É¹¦ */
+  61   1          sprintf(print_data,"Error: 0x%02x\r\n", (unsigned short)iError);     /* ´òÓ¡´íÎó */
+  62   1          SendStringDataToPC(print_data);
+  63   1          while ( 1 ) 
+  64   1          {
+  65   2            Delay_MS(500);
+  66   2          }
+  67   1      }
+  68          /*********************************************************************************
+  69          * Function Name  : keeplive_set
+  70          * Description    : ±£»î¶¨Ê±Æ÷²ÎÊýÉèÖÃ
+  71          * Input          : None
+  72          * Output         : None
+  73          * Return         : None
+  74          **********************************************************************************/
+  75          void keeplive_set(void)
+  76          {
+  77   1        CH395SetKeepLive(0,1); //Socket 0 ¿ªÆôKeepLive¹¦ÄÜ
+  78   1        CH395KeepLiveCNT(DEF_KEEP_LIVE_CNT);
+  79   1        CH395KeepLiveIDLE(DEF_KEEP_LIVE_IDLE);
+  80   1        CH395KeepLiveINTVL(DEF_KEEP_LIVE_PERIOD);
+  81   1      }
+  82          /*==============================================================================
+  83          * Function Name  : InitCH395InfParam
+  84          * Description    : ³õÊ¼»¯CH395Inf²ÎÊý
+  85          * Input          : None
+  86          * Output         : None
+  87          * Return         : None
+  88          ==============================================================================*/
+  89          void InitCH395InfParam(void)
+  90          {
+  91   1          memset(&CH395Inf,0,sizeof(CH395Inf));                            /* ½«CH395InfÈ«²¿ÇåÁã*/
+  92   1          memcpy(CH395Inf.IPAddr,CH395IPAddr,sizeof(CH395IPAddr));         /* ½«IPµØÖ·Ð´ÈëCH395InfÖÐ */
+  93   1          memcpy(CH395Inf.GWIPAddr,CH395GWIPAddr,sizeof(CH395GWIPAddr));   /* ½«Íø¹ØIPµØÖ·Ð´ÈëCH395InfÖÐ */
+  94   1          memcpy(CH395Inf.MASKAddr,CH395IPMask,sizeof(CH395IPMask));       /* ½«×ÓÍøÑÚÂëÐ´ÈëCH395InfÖÐ */
+  95   1      //  memcpy(CH395Inf.MacAddr,CH395MACAddr,sizeof(CH395MACAddr));
+  96   1      }
+  97          
+  98          /*==============================================================================
+  99          * Function Name  : InitSocketParam
+ 100          * Description    : ³õÊ¼»¯socket
+ 101          * Input          : None
+ 102          * Output         : None
+ 103          * Return         : None
+ 104          ==============================================================================*/
+ 105          void InitSocketParam(void)
+ 106          {
+ 107   1          memset(&ScokInf[0],0,sizeof(ScokInf[0]));                        /* ½«Socket0È«²¿ÇåÁã*/
+ 108   1          memcpy(ScokInf[0].IPAddr,Socket0DesIP,sizeof(Socket0DesIP));     /* ½«Ä¿µÄIPµØÖ·Ð´Èë */
+ 109   1          ScokInf[0].DesPort = Socket0DesPort;                             /* Ä¿µÄ¶Ë¿Ú */
+ 110   1          ScokInf[0].SourPort = Socket0SourPort;                           /* Ô´¶Ë¿Ú */
+ 111   1          ScokInf[0].ProtoType = PROTO_TYPE_TCP;                           /* TCPÄ£Ê½ */
+ 112   1          ScokInf[0].TcpMode = TCP_CLIENT_MODE;                            /* TCP¿Í»§¶ËÄ£Ê½ */
+ 113   1      }
+ 114          
+ 115          /*==============================================================================
+ 116          * Function Name  : CH395Init
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 3   
+
+ 117          * Description    : ÅäÖÃCH395µÄIP,GWIP,MACµÈ²ÎÊý£¬²¢³õÊ¼»¯
+ 118          * Input          : None
+ 119          * Output         : None
+ 120          * Return         : º¯ÊýÖ´ÐÐ½á¹û
+ 121          ==============================================================================*/
+ 122          unsigned char  CH395Init(void)
+ 123          {
+ 124   1          unsigned char i;
+ 125   1          
+ 126   1          i = CH395CMDCheckExist(0x65);                      
+ 127   1          if(i != 0x9a)return CH395_ERR_UNKNOW;                            /* ²âÊÔÃüÁî£¬Èç¹ûÎÞ·¨Í¨¹ý·µ»Ø0XFA */
+ 128   1                                                                           /* ·µ»Ø0XFAÒ»°ãÎªÓ²¼þ´íÎó»òÕß¶ÁÐ´Ê±Ðò
+             -²»¶Ô */
+ 129   1      //    SendStringDataToPC("Initializing CH395 IP,GWIP,MASK...\r\n");
+ 130   1      //  CH395CMDSetMACAddr(CH395Inf.MacAddr);                            /* ÉèÖÃCH395µÄMACµØÖ· */
+ 131   1          CH395CMDSetIPAddr(CH395Inf.IPAddr);                              /* ÉèÖÃCH395µÄIPµØÖ· */
+ 132   1          CH395CMDSetGWIPAddr(CH395Inf.GWIPAddr);                          /* ÉèÖÃÍø¹ØµØÖ· */
+ 133   1          CH395CMDSetMASKAddr(CH395Inf.MASKAddr);                          /* ÉèÖÃ×ÓÍøÑÚÂë£¬Ä¬ÈÏÎª255.255.255.0*
+             -/   
+ 134   1          i = CH395CMDInitCH395();                                         /* ³õÊ¼»¯CH395Ð¾Æ¬ */
+ 135   1          return i;
+ 136   1      }
+ 137          
+ 138          /*==============================================================================
+ 139          * Function Name  : CH395SocketInitOpen
+ 140          * Description    : ÅäÖÃCH395 socket ²ÎÊý£¬³õÊ¼»¯²¢´ò¿ªsocket
+ 141          * Input          : None
+ 142          * Output         : None
+ 143          * Return         : None
+ 144          ==============================================================================*/
+ 145          void CH395SocketInitOpen(void)
+ 146          {
+ 147   1          unsigned char i;
+ 148   1      
+ 149   1          /* socket 0ÎªTCP ClientÄ£Ê½ */
+ 150   1          CH395SetSocketProtType(0,PROTO_TYPE_TCP);                        /* ÉèÖÃsocket 0Ð­ÒéÀàÐÍ */
+ 151   1          CH395SetSocketDesIP(0,ScokInf[0].IPAddr);                        /* ÉèÖÃsocket 0Ä¿µÄIPµØÖ· */
+ 152   1          CH395SetSocketDesPort(0,ScokInf[0].DesPort);                     /* ÉèÖÃsocket 0Ä¿µÄ¶Ë¿Ú */
+ 153   1          CH395SetSocketSourPort(0,ScokInf[0].SourPort);                   /* ÉèÖÃsocket 0Ô´¶Ë¿Ú */
+ 154   1      //    SendStringDataToPC("Open Socket0...\r\n");
+ 155   1          i = CH395OpenSocket(0);                                          /* ´ò¿ªsocket 0 */
+ 156   1          mStopIfError(i);                                                 /* ¼ì²éÊÇ·ñ³É¹¦ */
+ 157   1      //    SendStringDataToPC("TCP Connecting...\r\n");
+ 158   1          i = CH395TCPConnect(0);                                          /* ¿ªÊ¼Á¬½Ó */
+ 159   1          mStopIfError(i);                                                 /* ¼ì²âÃüÁîÊÇ·ñÖ´ÐÐ³É¹¦,Èç¹ûÊ§°Ü£¬Ôòs
+             -ocket»á¹Ø±Õ */
+ 160   1      }
+ 161          
+ 162          /*==============================================================================
+ 163          * Function Name  : CH395SocketInterrupt
+ 164          * Description    : CH395 socket ÖÐ¶Ï,ÔÚÈ«¾ÖÖÐ¶ÏÖÐ±»µ÷ÓÃ
+ 165          * Input          : sockindex  SocketË÷Òý
+ 166          * Output         : None
+ 167          * Return         : None
+ 168          ==============================================================================*/
+ 169          void CH395SocketInterrupt(unsigned char sockindex)
+ 170          {
+ 171   1          unsigned char  sock_int_socket;
+ 172   1          unsigned char  i;
+ 173   1          unsigned short len;
+ 174   1      
+ 175   1          sock_int_socket = CH395GetSocketInt(sockindex);                  /* »ñÈ¡socket µÄÖÐ¶Ï×´Ì¬ */
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 4   
+
+ 176   1          if(sock_int_socket & SINT_STAT_SENBUF_FREE)                      /* ·¢ËÍ»º³åÇø¿ÕÏÐ£¬¿ÉÒÔ¼ÌÐøÐ´ÈëÒª·¢ËÍ
+             -µÄÊý¾Ý */
+ 177   1          {
+ 178   2            /********2021.05.29ÆÁ±ÎÏÔÊ¾********/
+ 179   2      //        SendStringDataToPC("Sending Buffer is Empty!\r\n");
+ 180   2          }
+ 181   1          if(sock_int_socket & SINT_STAT_SEND_OK)                          /* ·¢ËÍÍê³ÉÖÐ¶Ï */
+ 182   1          {
+ 183   2          /********2021.05.29ÆÁ±ÎÏÔÊ¾********/
+ 184   2      //        SendStringDataToPC("Sending CMD Successful!\r\n");
+ 185   2          }
+ 186   1          if(sock_int_socket & SINT_STAT_RECV)                             /* ½ÓÊÕÖÐ¶Ï */
+ 187   1          {
+ 188   2              len = CH395GetRecvLength(sockindex);                         /* »ñÈ¡µ±Ç°»º³åÇøÄÚÊý¾Ý³¤¶È */
+ 189   2              if(len == 0)
+ 190   2              {
+ 191   3                SendStringDataToPC("Socket0 RECV Interrupt,But Data Length is 0!!!\r\n");
+ 192   3                return;
+ 193   3              }
+ 194   2              memset(MyBuffer,'\0',sizeof(MyBuffer)); 
+ 195   2              CH395GetRecvData(sockindex,len,MyBuffer);         /* ¶ÁÈ¡Êý¾Ý */
+ 196   2              if(MyBuffer[len-1]==0x0D)  rev_over_flag=1;
+ 197   2      //        sprintf(print_data,"Receiving Data,Lenth = %dBytes,and Data list:\r\n",len);
+ 198   2              /********2021.05.29ÆÁ±ÎÏÔÊ¾********/
+ 199   2      //        SendStringDataToPC(print_data);
+ 200   2      //        SendStringDataToPC(MyBuffer);  
+ 201   2              
+ 202   2         }
+ 203   1         if(sock_int_socket & SINT_STAT_CONNECT)                            /* Á¬½ÓÖÐ¶Ï£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§*/
+ 204   1         {
+ 205   2             SendStringDataToPC("Chamber is Connected!\r\n");
+ 206   2             TCP_connect_falg=1;
+ 207   2      //       if(ScokInf[sockindex].TcpMode == TCP_SERVER_MODE)              /* Èç¹ûsocket Îª·þÎñÆ÷Ä£Ê½£¬ÓÃ»§¿É
+             -ÒÔ»ñÈ¡Ô¶¶ËµÄIPºÍ¶Ë¿Ú*/
+ 208   2      //       {
+ 209   2      //           CH395CMDGetRemoteIPP(sockindex,buf);
+ 210   2      //           sprintf(print_data,"IP address = %d.%d.%d.%d\r\n",(unsigned short)buf[0],(unsigned short)buf[
+             -1],(unsigned short)buf[2],(unsigned short)buf[3]);    
+ 211   2      //           SendStringDataToPC(print_data);
+ 212   2      //           tmp = (unsigned short)(buf[5]<<8) + buf[4];
+ 213   2      //           sprintf(print_data,"Port = %d\r\n",tmp);
+ 214   2      //           SendStringDataToPC(print_data);         
+ 215   2      //       }
+ 216   2         }
+ 217   1         if(sock_int_socket & SINT_STAT_DISCONNECT)                        /* ¶Ï¿ªÖÐ¶Ï£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§ */
+ 218   1         {
+ 219   2         }
+ 220   1         if(sock_int_socket & SINT_STAT_TIM_OUT)                           /* ³¬Ê±ÖÐ¶Ï£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§ */
+ 221   1         {
+ 222   2             SendStringDataToPC("Tcp Time out!!!\r\n");
+ 223   2       
+ 224   2      /* ²úÉú³¬Ê±ÖÐ¶Ï±íÊ¾Á¬½Ó/·¢ËÍ/½ÓÊÕÊý¾Ý³¬Ê±»òÕßÊ§°Ü£¬²úÉú³¬Ê±Ê±CH395Ð¾Æ¬ÄÚ²¿½«»á½«´Ë    */
+ 225   2      /* socket¹Ø±Õ£¬ÔÚÄ³Ð©Çé¿öÏÂCH395²¢²»»áÖØÊÔÁ¬½Ó£¬ÀýÈçÔ¶¶Ë¶Ë¿ÚÎ´´ò¿ª£¬Èç¹ûCH395Á¬½Ó£¬Ôò */
+ 226   2      /* Ô¶¶ËÉè±¸¿ÉÄÜ»á·¢³öRSTÇ¿ÖÆ½«´ËÁ¬½Ó¸´Î»£¬´ËÊ±CH395ÈÔÈ»»á²úÉú³¬Ê±ÖÐ¶Ï¡£±¾³ÌÐò½ö×÷ÑÝÊ¾ */
+ 227   2      /* Êµ¼ÊÓ¦ÓÃÖÐ²»ÍÆ¼ö²úÉú²úÉú³¬Ê±ÖÐ¶ÏºóÁ¢¼´Á¬½Ó£¬¿ÉÒÔ¼ä¸ôÒ»¶¨Ê±¼äÄÚÖØÐÂ´ò¿ªsocket½øÐÐÁ¬ */
+ 228   2      /* ¼´¿É¡£*/        
+ 229   2             if(ScokInf[sockindex].TcpMode == TCP_CLIENT_MODE)             /* ±¾³ÌÐòÊµ¼ÊÖ»ÓÃÁËÒ»¸ösocket */
+ 230   2             {
+ 231   3                 Delay_MS(1000);  
+ 232   3      //           SendStringDataToPC("Open Socket0 Once Again...\r\n");  /* ÑÓÊ±1SºóÔÙ´ÎÖØÊÔ£¬Ã»ÓÐ±ØÒª¹ýÓÚÆµ·±Á¬½
+             -Ó */
+ 233   3                 i = CH395OpenSocket(sockindex);
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 5   
+
+ 234   3                 mStopIfError(i);
+ 235   3                 SendStringDataToPC("TCP Connecting Once Again...\r\n");
+ 236   3                 CH395TCPConnect(sockindex);                               /* ¿ªÊ¼Á¬½Ó */
+ 237   3                 mStopIfError(i);
+ 238   3                 TCP_timeout_cunt++;
+ 239   3                 if(TCP_timeout_cunt>=10) TCP_timeout_flag = 1;
+ 240   3             }
+ 241   2         }
+ 242   1      }
+ 243          
+ 244          /*==============================================================================
+ 245          * Function Name  : CH395GlobalInterrupt
+ 246          * Description    : CH395È«¾ÖÖÐ¶Ïº¯Êý
+ 247          * Input          : None
+ 248          * Output         : None
+ 249          * Return         : None
+ 250          ==============================================================================*/
+ 251          void CH395GlobalInterrupt(void)
+ 252          {
+ 253   1          unsigned char  init_status;
+ 254   1          unsigned short i;
+ 255   1          unsigned char  buf[10]; 
+ 256   1       
+ 257   1          init_status = CH395CMDGetGlobIntStatus();
+ 258   1          if(init_status & GINT_STAT_UNREACH)                              /* ²»¿É´ïÖÐ¶Ï£¬¶ÁÈ¡²»¿É´ïÐÅÏ¢ */
+ 259   1          {
+ 260   2          SendStringDataToPC("Init status : GINT_STAT_UNREACH, the unreach info:\r\n"); /* UDPÄ£Ê½ÏÂ¿ÉÄÜ»á²úÉú²»¿É
+             -´ïÖÐ¶Ï */
+ 261   2              CH395CMDGetUnreachIPPT(buf); 
+ 262   2              SendStringDataToPC(buf);      
+ 263   2          }
+ 264   1          if(init_status & GINT_STAT_IP_CONFLI)                            /* ²úÉúIP³åÍ»ÖÐ¶Ï£¬½¨ÒéÖØÐÂÐÞ¸ÄCH395µ
+             -Ä IP£¬²¢³õÊ¼»¯CH395*/
+ 265   1          {
+ 266   2          }
+ 267   1          if(init_status & GINT_STAT_PHY_CHANGE)                           /* ²úÉúPHY¸Ä±äÖÐ¶Ï*/
+ 268   1          {
+ 269   2      //        SendStringDataToPC("GINT_STAT_PHY_CHANGE:\r\n");
+ 270   2              i = CH395CMDGetPHYStatus();                                  /* »ñÈ¡PHY×´Ì¬ */
+ 271   2              if(i == PHY_DISCONN)
+ 272   2              {
+ 273   3                SendStringDataToPC("Ethernet Disconnect!!!\r\n");/* Èç¹ûÊÇPHY_DISCONN£¬CH395ÄÚ²¿»á×Ô¶¯¹Ø±ÕËùÓÐµÄsocke
+             -t*/
+ 274   3      //          while(1)
+ 275   3      //          {
+ 276   3      //            LED_3 = 0;
+ 277   3      //            Delay_MS(500);
+ 278   3      //            LED_3 = 1;
+ 279   3      //            Delay_MS(500);
+ 280   3      //          }
+ 281   3              }
+ 282   2              if(i == PHY_100M_FLL)
+ 283   2              {
+ 284   3      //          SendStringDataToPC("Ethernet Connect! Communication Mode is: 100M Full duplex.\r\n");
+ 285   3              }
+ 286   2               
+ 287   2          }
+ 288   1          if(init_status & GINT_STAT_SOCK0)
+ 289   1          {
+ 290   2              CH395SocketInterrupt(0);                                     /* ´¦Àísocket 0ÖÐ¶Ï*/
+ 291   2          }
+ 292   1          if(init_status & GINT_STAT_SOCK1)                                /* ±¾³ÌÐòÊµ¼ÊÖ»ÓÃÁËsocket0,¸ÃÖÐ¶Ï²»»á
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 6   
+
+             -²úÉú */
+ 293   1          {
+ 294   2              CH395SocketInterrupt(1);                                     /* ´¦Àísocket 1ÖÐ¶Ï*/
+ 295   2          }
+ 296   1          if(init_status & GINT_STAT_SOCK2)                                /* ±¾³ÌÐòÊµ¼ÊÖ»ÓÃÁËsocket0,¸ÃÖÐ¶Ï²»»á
+             -²úÉú */
+ 297   1          {
+ 298   2              CH395SocketInterrupt(2);                                     /* ´¦Àísocket 2ÖÐ¶Ï*/
+ 299   2          }
+ 300   1          if(init_status & GINT_STAT_SOCK3)                                /* ±¾³ÌÐòÊµ¼ÊÖ»ÓÃÁËsocket0,¸ÃÖÐ¶Ï²»»á
+             -²úÉú */
+ 301   1          {
+ 302   2              CH395SocketInterrupt(3);                                     /* ´¦Àísocket 3ÖÐ¶Ï*/
+ 303   2          }
+ 304   1      }
+ 305          
+ 306          //==========ÉèÖÃLabEventÎÂÏäÃüÁî¸ñÊ½==================================================
+ 307          void Set_LabCMD_format(float ftemp)
+ 308          {
+ 309   1        unsigned char j;
+ 310   1        unsigned char Cham_neg_data[5];            //´æ´¢ÎÂÏä¸ºÎÂ¶ÈÊý¾Ý 
+ 311   1      
+ 312   1        if(ftemp>=100)
+ 313   1          sprintf(ChamberCMDData,"$01E 0%.1f 01000000000000000000000000000000\r",ftemp);
+ 314   1        else if(ftemp>=10)
+ 315   1          sprintf(ChamberCMDData,"$01E 00%.1f 01000000000000000000000000000000\r",ftemp);
+ 316   1        else if(ftemp>=0)
+ 317   1          sprintf(ChamberCMDData,"$01E 000%.1f 01000000000000000000000000000000\r",ftemp);
+ 318   1        else
+ 319   1        {
+ 320   2          sprintf(ChamberCMDData,"$01E -000.0 01000000000000000000000000000000\r");
+ 321   2          sprintf(Cham_neg_data,"%.1f",ftemp);
+ 322   2        if(ftemp>-10)
+ 323   2        {
+ 324   3          for(j=1;j<4;j++)
+ 325   3          {
+ 326   4            ChamberCMDData[7+j]=Cham_neg_data[j];
+ 327   4          }
+ 328   3        }
+ 329   2        else
+ 330   2        {
+ 331   3          for(j=1;j<5;j++)
+ 332   3          {
+ 333   4            ChamberCMDData[6+j]=Cham_neg_data[j];
+ 334   4          }
+ 335   3        }
+ 336   2        }
+ 337   1      }
+ 338          //==========ÉèÖÃLabEventÎÂÏäÎÂ¶È==================================================
+ 339          void Set_LabChamber_Temp(float set_temp)
+ 340          {
+ 341   1          unsigned int ij=0,time_cunt = 0;
+ 342   1      
+ 343   1        Set_LabCMD_format(set_temp);         //ÉèÖÃÃüÁî¸ñÊ½
+ 344   1        SendCMDToLabChamber(ChamberCMDData); //·¢ËÍÃüÁî
+ 345   1        while(1)                             //µÈ´ýÃüÁîÖ´ÐÐ²¢·µ»ØÊý¾Ý
+ 346   1        {          
+ 347   2          if(!CH395INT) CH395GlobalInterrupt();
+*** ERROR C202 IN LINE 347 OF CH395CMD.C: 'CH395INT': undefined identifier
+ 348   2          if(rev_over_flag==1)
+ 349   2          {
+ 350   3            rev_over_flag=0;
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 7   
+
+ 351   3            if(MyBuffer[0]=='0')             //·µ»Ø0±íÊ¾ÎÂÏäÖ´ÐÐÃüÁî³É¹¦
+ 352   3            {
+ 353   4              SendStringDataToPC("Set Temperature Successful!\r\n");
+ 354   4              break;
+ 355   4            }
+ 356   3          }
+ 357   2          //³¬Ê±Êä³ö
+ 358   2          ij++;                          //Ò»ÌõÓï¾äºÄÊ±2¸öÊ±ÖÓÖÜÆÚ
+ 359   2          if(ij==0)  time_cunt++;
+ 360   2          if(time_cunt>=5000)    
+ 361   2          {       
+ 362   3             SendStringDataToPC("Time out!Set Temperature Failed!!!\r\n");
+ 363   3             while(1);
+ 364   3          }
+ 365   2        }
+ 366   1        Delay_MS(1000);
+ 367   1      }
+ 368          //==========¹Ø±ÕÎÂÏä==================================================
+ 369          void Set_LabChamber_Off(void)
+ 370          {   
+ 371   1          unsigned int ij=0,time_cunt = 0;
+ 372   1      
+ 373   1          sprintf(ChamberCMDData,"$01E 0023.0 0000.0 00000000000000000000000000000000\r");
+ 374   1          SendCMDToLabChamber(ChamberCMDData);
+ 375   1          while(1)
+ 376   1          {          
+ 377   2            if(!CH395INT) CH395GlobalInterrupt();
+*** ERROR C202 IN LINE 377 OF CH395CMD.C: 'CH395INT': undefined identifier
+ 378   2            if(rev_over_flag==1)
+ 379   2            {
+ 380   3              rev_over_flag=0;
+ 381   3              if(MyBuffer[0]=='0')
+ 382   3              {
+ 383   4                SendStringDataToPC("Stop LabEvent Chamber Successful!\r\n");
+ 384   4                break;
+ 385   4              }
+ 386   3            }
+ 387   2            //³¬Ê±Êä³ö
+ 388   2            ij++;              //Ò»ÌõÓï¾äºÄÊ±2¸öÊ±ÖÓÖÜÆÚ
+ 389   2            if(ij==0)  time_cunt++;
+ 390   2            if(time_cunt>=5000)    
+ 391   2            {       
+ 392   3              SendStringDataToPC("Time out!Stop LabEvent Chamber Failed!!!\r\n");
+ 393   3              while(1);
+ 394   3            }
+ 395   2          }
+ 396   1      }
+ 397          //==========»ñÈ¡ÎÂÏä×´Ì¬==================================================
+ 398          void Request_LabChamber_State(void)
+ 399          {
+ 400   1        unsigned int ij=0,time_cunt = 0;
+ 401   1      
+ 402   1        sprintf(ChamberCMDData,"$01I\r");
+ 403   1        SendCMDToLabChamber(ChamberCMDData);
+ 404   1        while(1)
+ 405   1        {          
+ 406   2          if(!CH395INT) CH395GlobalInterrupt();
+*** ERROR C202 IN LINE 406 OF CH395CMD.C: 'CH395INT': undefined identifier
+ 407   2          if(rev_over_flag==1)
+ 408   2          {
+ 409   3            rev_over_flag=0;
+ 410   3            /********2021.05.29ÆÁ±ÎÏÔÊ¾********/
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 8   
+
+ 411   3      //      SendStringDataToPC("Request State Successful!\r\n");
+ 412   3            break;
+ 413   3          }
+ 414   2          //³¬Ê±Êä³ö
+ 415   2          ij++;              //Ò»ÌõÓï¾äºÄÊ±2¸öÊ±ÖÓÖÜÆÚ
+ 416   2          if(ij==0)  time_cunt++;
+ 417   2          if(time_cunt>=10000)     
+ 418   2          {       
+ 419   3            SendStringDataToPC("Time out!Request State Failed!!!\r\n");
+ 420   3            while(1);
+ 421   3          }
+ 422   2        }
+ 423   1      }
+ 424          //==========»ñÈ¡ÎÂÏäµ±Ç°ÎÂ¶È==================================================
+ 425          void Acqurie_LabCham_ActualTemp(float *pData)
+ 426          {
+ 427   1         unsigned char i,actual_temp[6];
+ 428   1      
+ 429   1         Request_LabChamber_State();  //»ñÈ¡ÎÂÏä×´Ì¬
+ 430   1         for(i=0;i<6;i++)             //½ÓÊÕÊý¾ÝµÄµÚ7Î»µ½µÚ12Î»±íÊ¾µÄÊÇµ±Ç°ÎÂÏäÊµ¼ÊÎÂ¶È
+ 431   1         {
+ 432   2          actual_temp[i]=MyBuffer[7+i];
+ 433   2         }
+ 434   1         pData[0] = atof(actual_temp);
+ 435   1      }
+ 436          //==========³õÊ¼»¯CH395ÒÔ¼°ÓëLabEventÎÂÏä½¨Á¢Á¬½Ó==================================================
+ 437          void Init_CH395_LabCham_Connect(void)
+ 438          {
+ 439   1          unsigned char i;
+ 440   1        
+ 441   1          CH395CMDReset(); //CH395Ó²¼þ¸´Î»
+ 442   1          Delay_MS(400);
+ 443   1        
+ 444   1      /* ³õÊ¼»¯CH395Ïà¹Ø±äÁ¿ */
+ 445   1          InitCH395InfParam();                                             
+ 446   1          i = CH395Init();                                       //³õÊ¼»¯CH395Ð¾Æ¬   
+ 447   1          mStopIfError(i);                                       //¼ì²é³õÊ¼»¯ÊÇ·ñ³É¹¦
+ 448   1      
+ 449   1         //CH395³õÊ¼»¯ºó£¬»á¸Ä±äPHYµÄ×´Ì¬²¢²úÉúPHYÖÐ¶Ï
+ 450   1          while(1)
+ 451   1          {                                                                 /* µÈ´ýÒÔÌ«ÍøÁ¬½Ó³É¹¦*/
+ 452   2            if(CH395CMDGetPHYStatus() == PHY_DISCONN)                     /* ²éÑ¯CH395ÊÇ·ñÁ¬½Ó */
+ 453   2            {
+ 454   3              Delay_MS(200);                                            /* Î´Á¬½ÓÔòµÈ´ý200MSºóÔÙ´Î²éÑ¯ */
+ 455   3            }
+ 456   2            else 
+ 457   2            {
+ 458   3              CH395GlobalInterrupt();
+ 459   3              break;
+ 460   3            }
+ 461   2          }
+ 462   1      
+ 463   1      /* ³õÊ¼»¯SocketÏà¹Ø±äÁ¿ */                                                                    
+ 464   1          InitSocketParam();                                                
+ 465   1          CH395SocketInitOpen();
+ 466   1        //Socket 0³õÊ¼»¯ºó£¬Èç¹ûTCPÁ¬½Ó³É¹¦£¬»á²úÉúSocket 0ÖÐ¶Ï
+ 467   1          while(1)
+ 468   1          {  
+ 469   2            if(!CH395INT) CH395GlobalInterrupt();
+*** ERROR C202 IN LINE 469 OF CH395CMD.C: 'CH395INT': undefined identifier
+ 470   2            if(TCP_connect_falg) break;   //Èç¹ûTCPÕýÈ·Á¬½Ó£¬¾ÍÍË³öÑ­»·
+ 471   2            if(TCP_timeout_flag)        //Á¬½Ó³¬Ê±
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 9   
+
+ 472   2            {
+ 473   3              SendStringDataToPC("Sorry,TCP Connecting Failed!!! Please Check!\r\n");
+ 474   3              while(1)
+ 475   3              {
+ 476   4                Delay_MS(500);
+ 477   4              }
+ 478   3           }      
+ 479   2        }
+ 480   1        Delay_MS(500);
+ 481   1        //±£»î¶¨Ê±Æ÷²ÎÊýÉèÖÃ
+ 482   1        keeplive_set();   
+ 483   1      }
+ 484          
+ 485          /********************************************************************************
+ 486          * Function Name  : ChamberSendCMD
+ 487          * Description    : ÏòÎÂÏä·¢ËÍÃüÁî
+ 488          *******************************************************************************/
+ 489          void SendCMDToLabChamber(unsigned char *cmdbuf)
+ 490          {
+ 491   1          unsigned short cmd_len;
+ 492   1      
+ 493   1        cmd_len = (unsigned short)strlen(cmdbuf);
+ 494   1        CH395SendData(0,cmdbuf,cmd_len);
+ 495   1      }
+ 496          
+ 497          /********************************************************************************
+ 498          * Function Name  : CH395CMDReset
+ 499          * Description    : ¸´Î»CH395Ð¾Æ¬
+ 500          * Input          : None
+ 501          * Output         : None
+ 502          * Return         : None
+ 503          *******************************************************************************/
+ 504          void CH395CMDReset(void)
+ 505          {
+ 506   1          xWriteCH395Cmd(CMD00_RESET_ALL);
+ 507   1          xEndCH395Cmd();
+ 508   1      }
+ 509          
+ 510          /*******************************************************************************
+ 511          * Function Name  : CH395CMDSleep
+ 512          * Description    : Ê¹CH395½øÈëË¯Ãß×´Ì¬
+ 513          * Input          : None
+ 514          * Output         : None
+ 515          * Return         : None
+ 516          *******************************************************************************/
+ 517          //void CH395CMDSleep(void)
+ 518          //{
+ 519          //    xWriteCH395Cmd(CMD00_ENTER_SLEEP);
+ 520          //    xEndCH395Cmd();
+ 521          //}
+ 522          
+ 523          /********************************************************************************
+ 524          * Function Name  : CH395CMDSleep
+ 525          * Description    : »ñÈ¡Ð¾Æ¬ÒÔ¼°¹Ì¼þ°æ±¾ºÅ£¬1×Ö½Ú£¬¸ßËÄÎ»±íÊ¾Ð¾Æ¬°æ±¾£¬
+ 526                             µÍËÄÎ»±íÊ¾¹Ì¼þ°æ±¾
+ 527          * Input          : None
+ 528          * Output         : None
+ 529          * Return         : 1×Ö½ÚÐ¾Æ¬¼°¹Ì¼þ°æ±¾ºÅ
+ 530          *******************************************************************************/
+ 531          //unsigned char CH395CMDGetVer(void)
+ 532          //{
+ 533          //    unsigned char i;
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 10  
+
+ 534          //    xWriteCH395Cmd(CMD01_GET_IC_VER);
+ 535          //    i = xReadCH395Data();
+ 536          //    xEndCH395Cmd();
+ 537          //    return i;
+ 538          //}
+ 539          
+ 540          /********************************************************************************
+ 541          * Function Name  : CH395CMDCheckExist
+ 542          * Description    : ²âÊÔÃüÁî£¬ÓÃÓÚ²âÊÔÓ²¼þÒÔ¼°½Ó¿ÚÍ¨Ñ¶
+ 543          * Input          : testdata 1×Ö½Ú²âÊÔÊý¾Ý
+ 544          * Output         : None
+ 545          * Return         : Ó²¼þOK£¬·µ»Ø testdata°´Î»È¡·´
+ 546          *******************************************************************************/
+ 547          unsigned char CH395CMDCheckExist(unsigned char testdata)
+ 548          {
+ 549   1          unsigned char i;
+ 550   1      
+ 551   1          xWriteCH395Cmd(CMD11_CHECK_EXIST);
+ 552   1          xWriteCH395Data(testdata);
+ 553   1          i = xReadCH395Data();
+ 554   1          xEndCH395Cmd();
+ 555   1          return i;
+ 556   1      }
+ 557          
+ 558          /********************************************************************************
+ 559          * Function Name  : CH395CMDSetPHY
+ 560          * Description    : ÉèÖÃPHY£¬Ö÷ÒªÉèÖÃCH395 PHYÎª100/10M »òÕßÈ«Ë«¹¤°ëË«¹¤£¬CH395Ä¬
+ 561                              Îª×Ô¶¯Ð­ÉÌ¡£
+ 562          * Input          : phystat ²Î¿¼PHY ÃüÁî²ÎÊý/×´Ì¬
+ 563          * Output         : None
+ 564          * Return         : None
+ 565          *******************************************************************************/
+ 566          //void CH395CMDSetPHY(unsigned char phystat)
+ 567          //{
+ 568          //    xWriteCH395Cmd(CMD10_SET_PHY);
+ 569          //    xWriteCH395Data(phystat);
+ 570          //    xEndCH395Cmd();
+ 571          //}
+ 572          
+ 573          /*******************************************************************************
+ 574          * Function Name  : CH395CMDGetPHYStatus
+ 575          * Description    : »ñÈ¡PHYµÄ×´Ì¬
+ 576          * Input          : None
+ 577          * Output         : None
+ 578          * Return         : µ±Ç°CH395PHY×´Ì¬£¬²Î¿¼PHY²ÎÊý/×´Ì¬¶¨Òå
+ 579          *******************************************************************************/
+ 580          unsigned char CH395CMDGetPHYStatus(void)
+ 581          {
+ 582   1          unsigned char i;
+ 583   1      
+ 584   1          xWriteCH395Cmd(CMD01_GET_PHY_STATUS);
+ 585   1          i = xReadCH395Data();
+ 586   1          xEndCH395Cmd();
+ 587   1          return i;
+ 588   1      }
+ 589          
+ 590          /*******************************************************************************
+ 591          * Function Name  : CH395CMDGetGlobIntStatus
+ 592          * Description    : »ñÈ¡È«¾ÖÖÐ¶Ï×´Ì¬£¬ÊÕµ½´ËÃüÁîCH395×Ô¶¯È¡ÏûÖÐ¶Ï£¬0x43¼°ÒÔÏÂ°æ±¾Ê¹ÓÃ
+ 593          * Input          : None
+ 594          * Output         : None
+ 595          * Return         : ·µ»Øµ±Ç°µÄÈ«¾ÖÖÐ¶Ï×´Ì¬
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 11  
+
+ 596          *******************************************************************************/
+ 597          unsigned char CH395CMDGetGlobIntStatus(void)
+ 598          {
+ 599   1          unsigned char init_status;
+ 600   1      
+ 601   1          xWriteCH395Cmd(CMD01_GET_GLOB_INT_STATUS);
+ 602   1          init_status = xReadCH395Data();
+ 603   1          xEndCH395Cmd();
+ 604   1          return  init_status;
+ 605   1      }
+ 606          
+ 607          /********************************************************************************
+ 608          * Function Name  : CH395CMDInitCH395
+ 609          * Description    : ³õÊ¼»¯CH395Ð¾Æ¬¡£
+ 610          * Input          : None
+ 611          * Output         : None
+ 612          * Return         : ·µ»ØÖ´ÐÐ½á¹û
+ 613          *******************************************************************************/
+ 614          unsigned char CH395CMDInitCH395(void)
+ 615          {
+ 616   1          unsigned char i = 0;
+ 617   1          unsigned char s = 0;
+ 618   1      
+ 619   1          xWriteCH395Cmd(CMD0W_INIT_CH395);
+ 620   1          xEndCH395Cmd();
+ 621   1          while(1)
+ 622   1          {
+ 623   2              Delay_MS(10);                                                /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+ 624   2              s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+ 625   2              if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+ 626   2              if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö,±¾º¯ÊýÐèÒª500MSÒÔÉÏÖ´ÐÐÍê
+             -±Ï */
+ 627   2          }
+ 628   1          return s;
+ 629   1      }
+ 630          
+ 631          /********************************************************************************
+ 632          * Function Name  : CH395CMDSetUartBaudRate
+ 633          * Description    : ÉèÖÃCH395´®¿Ú²¨ÌØÂÊ£¬½öÔÚ´®¿ÚÄ£Ê½ÏÂÓÐÐ§
+ 634          * Input          : baudrate ´®¿Ú²¨ÌØÂÊ
+ 635          * Output         : None
+ 636          * Return         : None
+ 637          *******************************************************************************/
+ 638          //void CH395CMDSetUartBaudRate(unsigned long baudrate)
+ 639          //{
+ 640          //    unsigned char i;
+ 641          //    xWriteCH395Cmd(CMD31_SET_BAUDRATE);
+ 642          //    xWriteCH395Data((unsigned char)baudrate);
+ 643          //    xWriteCH395Data((unsigned char)((unsigned short)baudrate >> 8));
+ 644          //    xWriteCH395Data((unsigned char)(baudrate >> 16));
+ 645          //    i = xReadCH395Data();
+ 646          //    xEndCH395Cmd();
+ 647          //}
+ 648          
+ 649          /*******************************************************************************
+ 650          * Function Name  : CH395GetCmdStatus
+ 651          * Description    : »ñÈ¡ÃüÁîÖ´ÐÐ×´Ì¬£¬Ä³Ð©ÃüÁîÐèÒªµÈ´ýÃüÁîÖ´ÐÐ½á¹û
+ 652          * Input          : None
+ 653          * Output         : None
+ 654          * Return         : ·µ»ØÉÏÒ»ÌõÃüÁîÖ´ÐÐ×´Ì¬
+ 655          *******************************************************************************/
+ 656          unsigned char CH395GetCmdStatus(void)
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 12  
+
+ 657          {
+ 658   1          unsigned char i;
+ 659   1      
+ 660   1          xWriteCH395Cmd(CMD01_GET_CMD_STATUS);
+ 661   1          i = xReadCH395Data();
+ 662   1          xEndCH395Cmd();
+ 663   1          return i;
+ 664   1      }
+ 665          
+ 666          /********************************************************************************
+ 667          * Function Name  : CH395CMDSetIPAddr
+ 668          * Description    : ÉèÖÃCH395µÄIPµØÖ·
+ 669          * Input          : ipaddr Ö¸IPµØÖ·
+ 670          * Output         : None
+ 671          * Return         : None
+ 672          *******************************************************************************/
+ 673          void CH395CMDSetIPAddr(unsigned char *ipaddr)
+ 674          {
+ 675   1          unsigned char i;
+ 676   1      
+ 677   1          xWriteCH395Cmd(CMD40_SET_IP_ADDR);
+ 678   1          for(i = 0; i < 4;i++)xWriteCH395Data(*ipaddr++);
+ 679   1          xEndCH395Cmd();
+ 680   1      }
+ 681          
+ 682          /********************************************************************************
+ 683          * Function Name  : CH395CMDSetGWIPAddr
+ 684          * Description    : ÉèÖÃCH395µÄÍø¹ØIPµØÖ·
+ 685          * Input          : ipaddr Ö¸ÏòÍø¹ØIPµØÖ·
+ 686          * Output         : None
+ 687          * Return         : None
+ 688          *******************************************************************************/
+ 689          void CH395CMDSetGWIPAddr(unsigned char *gwipaddr)
+ 690          {
+ 691   1          unsigned char i;
+ 692   1      
+ 693   1          xWriteCH395Cmd(CMD40_SET_GWIP_ADDR);
+ 694   1          for(i = 0; i < 4;i++)xWriteCH395Data(*gwipaddr++);
+ 695   1          xEndCH395Cmd();
+ 696   1      }
+ 697          
+ 698          /********************************************************************************
+ 699          * Function Name  : CH395CMDSetMASKAddr
+ 700          * Description    : ÉèÖÃCH395µÄ×ÓÍøÑÚÂë£¬Ä¬ÈÏÎª255.255.255.0
+ 701          * Input          : maskaddr Ö¸×ÓÍøÑÚÂëµØÖ·
+ 702          * Output         : None
+ 703          * Return         : None
+ 704          *******************************************************************************/
+ 705          void CH395CMDSetMASKAddr(unsigned char *maskaddr)
+ 706          {
+ 707   1          unsigned char i;
+ 708   1      
+ 709   1          xWriteCH395Cmd(CMD40_SET_MASK_ADDR);
+ 710   1          for(i = 0; i < 4;i++)xWriteCH395Data(*maskaddr++);
+ 711   1          xEndCH395Cmd();
+ 712   1      }
+ 713          
+ 714          /********************************************************************************
+ 715          * Function Name  : CH395CMDSetMACAddr
+ 716          * Description    : ÉèÖÃCH395µÄMACµØÖ·¡£
+ 717          * Input          : amcaddr MACµØÖ·Ö¸Õë
+ 718          * Output         : None
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 13  
+
+ 719          * Return         : None
+ 720          *******************************************************************************/
+ 721          //void CH395CMDSetMACAddr(unsigned char *amcaddr)
+ 722          //{
+ 723          //    unsigned char i;
+ 724          
+ 725          //    xWriteCH395Cmd(CMD60_SET_MAC_ADDR);
+ 726          //    for(i = 0; i < 6;i++)xWriteCH395Data(*amcaddr++);
+ 727          //    xEndCH395Cmd();
+ 728          //    Delay_MS(100); 
+ 729          //}
+ 730          
+ 731          /********************************************************************************
+ 732          * Function Name  : CH395CMDGetMACAddr
+ 733          * Description    : »ñÈ¡CH395µÄMACµØÖ·¡£
+ 734          * Input          : amcaddr MACµØÖ·Ö¸Õë
+ 735          * Output         : None
+ 736          * Return         : None
+ 737          *******************************************************************************/
+ 738          //void CH395CMDGetMACAddr(unsigned char *amcaddr)
+ 739          //{
+ 740          //    unsigned char i;
+ 741          
+ 742          //    xWriteCH395Cmd(CMD06_GET_MAC_ADDR);
+ 743          //    for(i = 0; i < 6;i++)*amcaddr++ = xReadCH395Data();
+ 744          //    xEndCH395Cmd();
+ 745          // }
+ 746          
+ 747          /*******************************************************************************
+ 748          * Function Name  : CH395CMDSetMACFilt
+ 749          * Description    : ÉèÖÃMAC¹ýÂË¡£
+ 750          * Input          : filtype ²Î¿¼ MAC¹ýÂË
+ 751                             table0 Hash0
+ 752                             table1 Hash1
+ 753          * Output         : None
+ 754          * Return         : None
+ 755          *******************************************************************************/
+ 756          //void CH395CMDSetMACFilt(unsigned char filtype,unsigned long table0,unsigned long table1)
+ 757          //{
+ 758          //    xWriteCH395Cmd(CMD90_SET_MAC_FILT);
+ 759          //    xWriteCH395Data(filtype);
+ 760          //    xWriteCH395Data((unsigned char)table0);
+ 761          //    xWriteCH395Data((unsigned char)((unsigned short)table0 >> 8));
+ 762          //    xWriteCH395Data((unsigned char)(table0 >> 16));
+ 763          //    xWriteCH395Data((unsigned char)(table0 >> 24));
+ 764          
+ 765          //    xWriteCH395Data((unsigned char)table1);
+ 766          //    xWriteCH395Data((unsigned char)((unsigned short)table1 >> 8));
+ 767          //    xWriteCH395Data((unsigned char)(table1 >> 16));
+ 768          //    xWriteCH395Data((unsigned char)(table1 >> 24));
+ 769          //    xEndCH395Cmd();
+ 770          //}
+ 771          
+ 772          /********************************************************************************
+ 773          * Function Name  : CH395CMDGetUnreachIPPT
+ 774          * Description    : »ñÈ¡²»¿É´ïÐÅÏ¢ (IP,Port,Protocol Type)
+ 775          * Input          : list ±£´æ»ñÈ¡µ½µÄ²»¿É´ï
+ 776                                  µÚ1¸ö×Ö½ÚÎª²»¿É´ï´úÂë£¬Çë²Î¿¼ ²»¿É´ï´úÂë(CH395INC.H)
+ 777                                  µÚ2¸ö×Ö½ÚÎªIP°üÐ­ÒéÀàÐÍ
+ 778                                  µÚ3-4×Ö½ÚÎª¶Ë¿ÚºÅ
+ 779                                  µÚ4-8×Ö½ÚÎªIPµØÖ·
+ 780          * Output         : None
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 14  
+
+ 781          * Return         : None
+ 782          *******************************************************************************/
+ 783          void CH395CMDGetUnreachIPPT(unsigned char *list)
+ 784          {
+ 785   1          unsigned char i;
+ 786   1      
+ 787   1          xWriteCH395Cmd(CMD08_GET_UNREACH_IPPORT);
+ 788   1          for(i = 0; i < 8; i++)
+ 789   1          {
+ 790   2              *list++ = xReadCH395Data();
+ 791   2          }   
+ 792   1          xEndCH395Cmd();
+ 793   1      }
+ 794          
+ 795          /********************************************************************************
+ 796          * Function Name  : CH395CMDGetRemoteIPP
+ 797          * Description    : »ñÈ¡Ô¶¶ËµÄIPºÍ¶Ë¿ÚµØÖ·£¬Ò»°ãÔÚTCP ServerÄ£Ê½ÏÂÊ¹ÓÃ
+ 798          * Input          : sockindex SocketË÷Òý
+ 799                             list ±£´æIPºÍ¶Ë¿Ú
+ 800          * Output         : None
+ 801          * Return         : None
+ 802          *******************************************************************************/
+ 803          //void CH395CMDGetRemoteIPP(unsigned char sockindex,unsigned char *list)
+ 804          //{
+ 805          //    unsigned char i;
+ 806          
+ 807          //    xWriteCH395Cmd(CMD06_GET_REMOT_IPP_SN);
+ 808          //    xWriteCH395Data(sockindex);
+ 809          //    for(i = 0; i < 6; i++)
+ 810          //    {
+ 811          //        *list++ = xReadCH395Data();
+ 812          //    }   
+ 813          //    xEndCH395Cmd();
+ 814          //}
+ 815          
+ 816          /*******************************************************************************
+ 817          * Function Name  : CH395SetSocketDesIP
+ 818          * Description    : ÉèÖÃsocket nµÄÄ¿µÄIPµØÖ·
+ 819          * Input          : sockindex SocketË÷Òý
+ 820                             ipaddr Ö¸ÏòIPµØÖ·
+ 821          * Output         : None
+ 822          * Return         : None
+ 823          *******************************************************************************/
+ 824          void CH395SetSocketDesIP(unsigned char sockindex,unsigned char *ipaddr)
+ 825          {
+ 826   1          xWriteCH395Cmd(CMD50_SET_IP_ADDR_SN);
+ 827   1          xWriteCH395Data(sockindex);
+ 828   1          xWriteCH395Data(*ipaddr++);
+ 829   1          xWriteCH395Data(*ipaddr++);
+ 830   1          xWriteCH395Data(*ipaddr++);
+ 831   1          xWriteCH395Data(*ipaddr++);
+ 832   1          xEndCH395Cmd();
+ 833   1      }
+ 834          
+ 835          /*******************************************************************************
+ 836          * Function Name  : CH395SetSocketProtType
+ 837          * Description    : ÉèÖÃsocket µÄÐ­ÒéÀàÐÍ
+ 838          * Input          : sockindex SocketË÷Òý
+ 839                             prottype Ð­ÒéÀàÐÍ£¬Çë²Î¿¼ socketÐ­ÒéÀàÐÍ¶¨Òå(CH395INC.H)
+ 840          * Output         : None
+ 841          * Return         : None
+ 842          *******************************************************************************/
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 15  
+
+ 843          void CH395SetSocketProtType(unsigned char sockindex,unsigned char prottype)
+ 844          {
+ 845   1          xWriteCH395Cmd(CMD20_SET_PROTO_TYPE_SN);
+ 846   1          xWriteCH395Data(sockindex);
+ 847   1          xWriteCH395Data(prottype);
+ 848   1          xEndCH395Cmd();
+ 849   1      }
+ 850          
+ 851          /*******************************************************************************
+ 852          
+ 853          * Function Name  : CH395SetSocketDesPort
+ 854          * Description    : ÉèÖÃsocket nµÄÄ¿µÄ¶Ë¿ÚµØÖ·
+ 855          * Input          : sockindex SocketË÷Òý
+ 856                             desprot 2×Ö½ÚÄ¿µÄ¶Ë¿Ú
+ 857          * Output         : None
+ 858          * Return         : None
+ 859          *******************************************************************************/
+ 860          void CH395SetSocketDesPort(unsigned char sockindex,unsigned short desprot)
+ 861          {
+ 862   1          xWriteCH395Cmd(CMD30_SET_DES_PORT_SN);
+ 863   1          xWriteCH395Data(sockindex);
+ 864   1          xWriteCH395Data((unsigned char)desprot);
+ 865   1          xWriteCH395Data((unsigned char)(desprot >> 8));
+ 866   1          xEndCH395Cmd();
+ 867   1      }
+ 868          
+ 869          /*******************************************************************************
+ 870          * Function Name  : CH395SetSocketSourPort
+ 871          * Description    : ÉèÖÃsocket nµÄÔ´¶Ë¿ÚµØÖ·
+ 872          * Input          : sockindex SocketË÷Òý
+ 873                             desprot 2×Ö½ÚÔ´¶Ë¿Ú
+ 874          * Output         : None
+ 875          * Return         : None
+ 876          *******************************************************************************/
+ 877          void CH395SetSocketSourPort(unsigned char sockindex,unsigned short surprot)
+ 878          {
+ 879   1          xWriteCH395Cmd(CMD30_SET_SOUR_PORT_SN);
+ 880   1          xWriteCH395Data(sockindex);
+ 881   1          xWriteCH395Data((unsigned char)surprot);
+ 882   1          xWriteCH395Data((unsigned char)(surprot>>8));
+ 883   1          xEndCH395Cmd();
+ 884   1      }
+ 885          
+ 886          /******************************************************************************
+ 887          * Function Name  : CH395SetSocketIPRAWProto
+ 888          * Description    : IPÄ£Ê½ÏÂ£¬socket IP°üÐ­Òé×Ö¶Î
+ 889          * Input          : sockindex SocketË÷Òý
+ 890                             prototype IPRAWÄ£Ê½1×Ö½ÚÐ­Òé×Ö¶Î
+ 891          * Output         : None
+ 892          * Return         : None
+ 893          *******************************************************************************/
+ 894          //void CH395SetSocketIPRAWProto(unsigned char sockindex,unsigned char prototype)
+ 895          //{
+ 896          //    xWriteCH395Cmd(CMD20_SET_IPRAW_PRO_SN);
+ 897          //    xWriteCH395Data(sockindex);
+ 898          //    xWriteCH395Data(prototype);
+ 899          //    xEndCH395Cmd();
+ 900          //}
+ 901          
+ 902          /********************************************************************************
+ 903          * Function Name  : CH395EnablePing
+ 904          * Description    : ¿ªÆô/¹Ø±Õ PING
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 16  
+
+ 905          * Input          : enable : 1  ¿ªÆôPING
+ 906                                    £º0  ¹Ø±ÕPING
+ 907          * Output         : None
+ 908          * Return         : None
+ 909          *******************************************************************************/
+ 910          //void CH395EnablePing(unsigned char enable)
+ 911          //{
+ 912          //    xWriteCH395Cmd(CMD01_PING_ENABLE);
+ 913          //    xWriteCH395Data(enable);
+ 914          //    xEndCH395Cmd();
+ 915          //}
+ 916          
+ 917          /********************************************************************************
+ 918          * Function Name  : CH395SendData
+ 919          * Description    : Ïò·¢ËÍ»º³åÇøÐ´Êý¾Ý
+ 920          * Input          : sockindex SocketË÷Òý
+ 921                             databuf  Êý¾Ý»º³åÇø
+ 922                             len   ³¤¶È
+ 923          * Output         : None
+ 924          * Return         : None
+ 925          *******************************************************************************/
+ 926          void CH395SendData(unsigned char sockindex,unsigned char *databuf,unsigned short len)
+ 927          {
+ 928   1          unsigned short i;
+ 929   1      
+ 930   1          xWriteCH395Cmd(CMD30_WRITE_SEND_BUF_SN);
+ 931   1          xWriteCH395Data((unsigned char)sockindex);
+ 932   1          xWriteCH395Data((unsigned char)len);
+ 933   1          xWriteCH395Data((unsigned char)(len>>8));
+ 934   1         
+ 935   1          for(i = 0; i < len; i++)
+ 936   1          {
+ 937   2              xWriteCH395Data(*databuf++);
+ 938   2          }
+ 939   1          xEndCH395Cmd();
+ 940   1      }
+ 941          
+ 942          /*******************************************************************************
+ 943          * Function Name  : CH395GetRecvLength
+ 944          * Description    : »ñÈ¡½ÓÊÕ»º³åÇø³¤¶È
+ 945          * Input          : sockindex SocketË÷Òý
+ 946          * Output         : None
+ 947          * Return         : ·µ»Ø½ÓÊÕ»º³åÇøÓÐÐ§³¤¶È
+ 948          *******************************************************************************/
+ 949          unsigned short CH395GetRecvLength(unsigned char sockindex)
+ 950          {
+ 951   1          unsigned short i;
+ 952   1      
+ 953   1          xWriteCH395Cmd(CMD12_GET_RECV_LEN_SN);
+ 954   1          xWriteCH395Data((unsigned char)sockindex);
+ 955   1          i = xReadCH395Data();
+ 956   1          i = (unsigned short)(xReadCH395Data()<<8) + i;
+ 957   1          xEndCH395Cmd();
+ 958   1          return i;
+ 959   1      }
+ 960          
+ 961          /*******************************************************************************
+ 962          * Function Name  : CH395ClearRecvBuf
+ 963          * Description    : Çå³ý½ÓÊÕ»º³åÇø
+ 964          * Input          : sockindex SocketË÷Òý
+ 965          * Output         : None
+ 966          * Return         : None
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 17  
+
+ 967          *******************************************************************************/
+ 968          //void CH395ClearRecvBuf(unsigned char sockindex)
+ 969          //{
+ 970          //    xWriteCH395Cmd(CMD10_CLEAR_RECV_BUF_SN);
+ 971          //    xWriteCH395Data((unsigned char)sockindex);
+ 972          //    xEndCH395Cmd();
+ 973          //}
+ 974          
+ 975          /********************************************************************************
+ 976          * Function Name  : CH395GetRecvLength
+ 977          * Description    : ¶ÁÈ¡½ÓÊÕ»º³åÇøÊý¾Ý
+ 978          * Input          : sockindex SocketË÷Òý
+ 979                             len   ³¤¶È
+ 980                             pbuf  »º³åÇø
+ 981          * Output         : None
+ 982          * Return         : None
+ 983          *******************************************************************************/
+ 984          void CH395GetRecvData(unsigned char sockindex,unsigned short len,unsigned char *pbuf)
+ 985          {
+ 986   1          unsigned short i;
+ 987   1          if(!len)return;
+ 988   1          xWriteCH395Cmd(CMD30_READ_RECV_BUF_SN);
+ 989   1          xWriteCH395Data(sockindex);
+ 990   1          xWriteCH395Data((unsigned char)len);
+ 991   1          xWriteCH395Data((unsigned char)(len>>8));
+ 992   1          Delay_5US();
+ 993   1          for(i = 0; i < len; i++)
+ 994   1          {
+ 995   2             *pbuf = xReadCH395Data();
+ 996   2             pbuf++;
+ 997   2          }   
+ 998   1          xEndCH395Cmd();
+ 999   1      }
+1000          
+1001          /********************************************************************************
+1002          * Function Name  : CH395CMDSetRetryCount
+1003          * Description    : ÉèÖÃÖØÊÔ´ÎÊý
+1004          * Input          : count ÖØÊÔÖµ£¬×î´óÎª20´Î
+1005          * Output         : None
+1006          * Return         : None
+1007          ********************************************************************************/
+1008          //void CH395CMDSetRetryCount(unsigned char count)
+1009          //{
+1010          //    xWriteCH395Cmd(CMD10_SET_RETRAN_COUNT);
+1011          //    xWriteCH395Data(count);
+1012          //    xEndCH395Cmd();
+1013          //}
+1014          
+1015          /********************************************************************************
+1016          * Function Name  : CH395CMDSetRetryPeriod
+1017          * Description    : ÉèÖÃÖØÊÔÖÜÆÚ
+1018          * Input          : period ÖØÊÔÖÜÆÚµ¥Î»ÎªºÁÃë£¬×î´ó1000ms
+1019          * Output         : None
+1020          * Return         : None
+1021          *******************************************************************************/
+1022          //void CH395CMDSetRetryPeriod(unsigned short period)
+1023          //{
+1024          //    xWriteCH395Cmd(CMD10_SET_RETRAN_COUNT);
+1025          //    xWriteCH395Data((unsigned char)period);
+1026          //    xWriteCH395Data((unsigned char)(period>>8));
+1027          //    xEndCH395Cmd();
+1028          //}
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 18  
+
+1029          
+1030          /********************************************************************************
+1031          * Function Name  : CH395CMDGetSocketStatus
+1032          * Description    : »ñÈ¡socket
+1033          * Input          : None
+1034          * Output         : socket nµÄ×´Ì¬ÐÅÏ¢£¬µÚ1×Ö½ÚÎªsocket ´ò¿ª»òÕß¹Ø±Õ
+1035                             µÚ2×Ö½ÚÎªTCP×´Ì¬
+1036          * Return         : None
+1037          *******************************************************************************/
+1038          //void CH395CMDGetSocketStatus(unsigned char sockindex,unsigned char *status)
+1039          //{
+1040          //    xWriteCH395Cmd(CMD12_GET_SOCKET_STATUS_SN);
+1041          //    xWriteCH395Data(sockindex);
+1042          //    *status++ = xReadCH395Data();
+1043          //    *status++ = xReadCH395Data();
+1044          //    xEndCH395Cmd();
+1045          //}
+1046          
+1047          /*******************************************************************************
+1048          * Function Name  : CH395OpenSocket
+1049          * Description    : ´ò¿ªsocket£¬´ËÃüÁîÐèÒªµÈ´ýÖ´ÐÐ³É¹¦
+1050          * Input          : sockindex SocketË÷Òý
+1051          * Output         : None
+1052          * Return         : ·µ»ØÖ´ÐÐ½á¹û
+1053          *******************************************************************************/
+1054          unsigned char  CH395OpenSocket(unsigned char sockindex)
+1055          {
+1056   1          unsigned char i = 0;
+1057   1          unsigned char s = 0;
+1058   1          xWriteCH395Cmd(CMD1W_OPEN_SOCKET_SN);
+1059   1          xWriteCH395Data(sockindex);
+1060   1          xEndCH395Cmd();
+1061   1          while(1)
+1062   1          {
+1063   2              Delay_MS(5);                                                 /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+1064   2              s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1065   2              if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1066   2              if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+1067   2          }
+1068   1          return s;
+1069   1      }
+1070          
+1071          /*******************************************************************************
+1072          * Function Name  : CH395CloseSocket
+1073          * Description    : ¹Ø±Õsocket£¬
+1074          * Input          : sockindex SocketË÷Òý
+1075          * Output         : None
+1076          * Return         : ·µ»ØÖ´ÐÐ½á¹û
+1077          *******************************************************************************/
+1078          //unsigned char  CH395CloseSocket(unsigned char sockindex)
+1079          //{
+1080          //    unsigned char i = 0;
+1081          //    unsigned char s = 0;
+1082          //    xWriteCH395Cmd(CMD1W_CLOSE_SOCKET_SN);
+1083          //    xWriteCH395Data(sockindex);
+1084          //    xEndCH395Cmd();
+1085          //    while(1)
+1086          //    {
+1087          //        Delay_MS(5);                                                 /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+1088          //        s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1089          //        if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1090          //        if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 19  
+
+1091          //    }
+1092          //    return s;
+1093          //}
+1094          
+1095          /********************************************************************************
+1096          * Function Name  : CH395TCPConnect
+1097          * Description    : TCPÁ¬½Ó£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§£¬´ËÃüÁîÐèÒªµÈ´ýÖ´ÐÐ³É¹¦
+1098          * Input          : sockindex SocketË÷Òý
+1099          * Output         : None
+1100          * Return         : ·µ»ØÖ´ÐÐ½á¹û
+1101          *******************************************************************************/
+1102          unsigned char CH395TCPConnect(unsigned char sockindex)
+1103          {
+1104   1          unsigned char i = 0;
+1105   1          unsigned char s = 0;
+1106   1          xWriteCH395Cmd(CMD1W_TCP_CONNECT_SN);
+1107   1          xWriteCH395Data(sockindex);
+1108   1          xEndCH395Cmd();
+1109   1          while(1)
+1110   1          {
+1111   2              Delay_MS(5);                                                 /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+1112   2              s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1113   2              if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1114   2              if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+1115   2          }
+1116   1          return s;
+1117   1      }
+1118          
+1119          /******************************************************************************
+1120          * Function Name  : CH395TCPListen
+1121          * Description    : TCP¼àÌý£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§£¬´ËÃüÁîÐèÒªµÈ´ýÖ´ÐÐ³É¹¦
+1122          * Input          : sockindex SocketË÷Òý
+1123          * Output         : None
+1124          * Return         : ·µ»ØÖ´ÐÐ½á¹û
+1125          *******************************************************************************/
+1126          //unsigned char CH395TCPListen(unsigned char sockindex)
+1127          //{
+1128          //    unsigned char i = 0;
+1129          //    unsigned char s = 0;
+1130          //    xWriteCH395Cmd(CMD1W_TCP_LISTEN_SN);
+1131          //    xWriteCH395Data(sockindex);
+1132          //    xEndCH395Cmd();
+1133          //    while(1)
+1134          //    {
+1135          //        Delay_MS(5);                                                 /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+1136          //        s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1137          //        if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1138          //        if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+1139          //    }
+1140          //    return s;
+1141          //}
+1142          
+1143          /********************************************************************************
+1144          * Function Name  : CH395TCPDisconnect
+1145          * Description    : TCP¶Ï¿ª£¬½öÔÚTCPÄ£Ê½ÏÂÓÐÐ§£¬´ËÃüÁîÐèÒªµÈ´ýÖ´ÐÐ³É¹¦
+1146          * Input          : sockindex SocketË÷Òý
+1147          * Output         : None
+1148          * Return         : None
+1149          *******************************************************************************/
+1150          //unsigned char CH395TCPDisconnect(unsigned char sockindex)
+1151          //{
+1152          //    unsigned char i = 0;
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 20  
+
+1153          //    unsigned char s = 0;
+1154          //    xWriteCH395Cmd(CMD1W_TCP_DISNCONNECT_SN);
+1155          //    xWriteCH395Data(sockindex);
+1156          //    xEndCH395Cmd();
+1157          //    while(1)
+1158          //    {
+1159          //        Delay_MS(5);                                                 /* ÑÓÊ±²éÑ¯£¬½¨Òé2MSÒÔÉÏ*/
+1160          //        s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1161          //        if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1162          //        if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+1163          //    }
+1164          //    return s;
+1165          //}
+1166          
+1167          /*******************************************************************************
+1168          * Function Name  : CH395GetSocketInt
+1169          * Description    : »ñÈ¡socket nµÄÖÐ¶Ï×´Ì¬
+1170          * Input          : sockindex   socketË÷Òý
+1171          * Output         : None
+1172          * Return         : ÖÐ¶Ï×´Ì¬
+1173          *******************************************************************************/
+1174          unsigned char CH395GetSocketInt(unsigned char sockindex)
+1175          {
+1176   1          unsigned char intstatus;
+1177   1          xWriteCH395Cmd(CMD11_GET_INT_STATUS_SN);
+1178   1          xWriteCH395Data(sockindex);
+1179   1          Delay_5US();
+1180   1          intstatus = xReadCH395Data();
+1181   1          xEndCH395Cmd();
+1182   1          return intstatus;
+1183   1      }
+1184          
+1185          /*******************************************************************************
+1186          * Function Name  : CH395CRCRet6Bit
+1187          * Description    : ¶Ô¶à²¥µØÖ·½øÐÐCRCÔËËã£¬²¢È¡¸ß6Î»¡£
+1188          * Input          : mac_addr   MACµØÖ·
+1189          * Output         : None
+1190          * Return         : ·µ»ØCRC32µÄ¸ß6Î»
+1191          *******************************************************************************/
+1192          //unsigned char CH395CRCRet6Bit(unsigned char *mac_addr)
+1193          //{
+1194          //    long perByte;
+1195          //    long perBit;
+1196          //    const unsigned long poly = 0x04C11DB7;
+1197          //    unsigned long crc_value = 0xFFFFFFFF;
+1198          //    unsigned char c;
+1199          //    for ( perByte = 0; perByte < 6; perByte ++ ) 
+1200          //    {
+1201          //        c = *(mac_addr++);
+1202          //        for ( perBit = 0; perBit < 8; perBit++ ) 
+1203          //        {
+1204          //            crc_value = (crc_value<<1)^((((crc_value>>31)^c)&0x01)?poly:0);
+1205          //            c >>= 1;
+1206          //        }
+1207          //    }
+1208          //    crc_value=crc_value>>26;                                      
+1209          //    return ((unsigned char)crc_value);
+1210          //}
+1211          
+1212          /******************************************************************************
+1213          * Function Name  : CH395DHCPEnable
+1214          * Description    : Æô¶¯/Í£Ö¹DHCP
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 21  
+
+1215          * Input          : flag   1:Æô¶¯DHCP;0£ºÍ£Ö¹DHCP
+1216          * Output         : None
+1217          * Return         : Ö´ÐÐ×´Ì¬
+1218          *******************************************************************************/
+1219          //unsigned char  CH395DHCPEnable(unsigned char flag)
+1220          //{
+1221          //    unsigned char i = 0;
+1222          //    unsigned char s;
+1223          //    xWriteCH395Cmd(CMD10_DHCP_ENABLE);
+1224          //    xWriteCH395Data(flag);
+1225          //    xEndCH395Cmd();
+1226          //    while(1)
+1227          //    {
+1228          //        Delay_MS(20);
+1229          //        s = CH395GetCmdStatus();                                     /* ²»ÄÜ¹ýÓÚÆµ·±²éÑ¯*/
+1230          //        if(s !=CH395_ERR_BUSY)break;                                 /* Èç¹ûCH395Ð¾Æ¬·µ»ØÃ¦×´Ì¬*/
+1231          //        if(i++ > 200)return CH395_ERR_UNKNOW;                        /* ³¬Ê±ÍË³ö*/
+1232          //    }
+1233          //    return s;
+1234          //}
+1235          
+1236          /******************************************************************************
+1237          * Function Name  : CH395GetDHCPStatus
+1238          * Description    : »ñÈ¡DHCP×´Ì¬
+1239          * Input          : None
+1240          * Output         : None
+1241          * Return         : DHCP×´Ì¬£¬0Îª³É¹¦£¬ÆäËûÖµ±íÊ¾´íÎó
+1242          *******************************************************************************/
+1243          //unsigned char CH395GetDHCPStatus(void)
+1244          //{
+1245          //    unsigned char status;
+1246          //    xWriteCH395Cmd(CMD01_GET_DHCP_STATUS);
+1247          //    status = xReadCH395Data();
+1248          //    xEndCH395Cmd();
+1249          //    return status;
+1250          //}
+1251          
+1252          /*******************************************************************************
+1253          * Function Name  : CH395GetIPInf
+1254          * Description    : »ñÈ¡IP£¬×ÓÍøÑÚÂëºÍÍø¹ØµØÖ·
+1255          * Input          : None
+1256          * Output         : 12¸ö×Ö½ÚµÄIP,×ÓÍøÑÚÂëºÍÍø¹ØµØÖ·
+1257          * Return         : None
+1258          *******************************************************************************/
+1259          //void CH395GetIPInf(unsigned char *addr)
+1260          //{
+1261          //    unsigned char i;
+1262          //    xWriteCH395Cmd(CMD014_GET_IP_INF);
+1263          //    for(i = 0; i < 20; i++)
+1264          //    {
+1265          //     *addr++ = xReadCH395Data();
+1266          //    }
+1267          //    xEndCH395Cmd();
+1268          //}
+1269          
+1270          /*******************************************************************************
+1271          * Function Name  : CH395WriteGPIOAddr
+1272          * Description    : Ð´GPIO¼Ä´æÆ÷
+1273          * Input          : regadd   ¼Ä´æÆ÷µØÖ·
+1274          *                £ºregval   ¼Ä´æÆ÷Öµ
+1275          * Output         : None
+1276          * Return         : None
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 22  
+
+1277          *******************************************************************************/
+1278          //void CH395WriteGPIOAddr(unsigned char regadd,unsigned char regval)
+1279          //{
+1280          //    xWriteCH395Cmd(CMD20_WRITE_GPIO_REG);
+1281          //    xWriteCH395Data(regadd);
+1282          //    xWriteCH395Data(regval);
+1283          //}
+1284          
+1285          /*******************************************************************************
+1286          * Function Name  : CH395ReadGPIOAddr
+1287          * Description    : ¶ÁGPIO¼Ä´æÆ÷
+1288          * Input          : regadd   ¼Ä´æÆ÷µØÖ·
+1289          * Output         : None
+1290          * Return         : ¼Ä´æÆ÷µÄÖµ
+1291          *******************************************************************************/
+1292          //unsigned char CH395ReadGPIOAddr(unsigned char regadd)
+1293          //{
+1294          //    unsigned char i;
+1295          //    xWriteCH395Cmd(CMD10_READ_GPIO_REG);
+1296          //    xWriteCH395Data(regadd);
+1297          //    Delay_MS(1);
+1298          //    i = xReadCH395Data();
+1299          //    return i;
+1300          //}
+1301          
+1302          /*******************************************************************************
+1303          * Function Name  : CH395EEPROMErase
+1304          * Description    : ²Á³ýEEPROM
+1305          * Input          : None
+1306          * Output         : None
+1307          * Return         : Ö´ÐÐ×´Ì¬
+1308          *******************************************************************************/
+1309          //unsigned char CH395EEPROMErase(void)
+1310          //{
+1311          //    unsigned char i;    
+1312          //    xWriteCH395Cmd(CMD00_EEPROM_ERASE);
+1313          //    while(1)
+1314          //    {
+1315          //       Delay_MS(20);
+1316          //       i = CH395GetCmdStatus();
+1317          //       if(i == CH395_ERR_BUSY)continue;
+1318          //       break;
+1319          //    }
+1320          //    return i;
+1321          //}
+1322          
+1323          /*******************************************************************************
+1324          * Function Name  : CH395EEPROMWrite
+1325          * Description    : Ð´EEPROM
+1326          * Input          : eepaddr  EEPROMµØÖ·
+1327          *                £ºbuf      »º³åÇøµØÖ·
+1328          *                £ºlen      ³¤¶È
+1329          * Output         : None
+1330          * Return         : Ö´ÐÐ×´Ì¬
+1331          *******************************************************************************/
+1332          //unsigned char CH395EEPROMWrite(unsigned short eepaddr,unsigned char *buf,unsigned char len)
+1333          //{
+1334          //    unsigned char i;
+1335          //    xWriteCH395Cmd(CMD30_EEPROM_WRITE);
+1336          //    xWriteCH395Data((unsigned char)(eepaddr));
+1337          //    xWriteCH395Data((unsigned char)(eepaddr >> 8));
+1338          //    xWriteCH395Data(len);  
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 23  
+
+1339          //    while(len--)xWriteCH395Data(*buf++);
+1340          //    while(1)
+1341          //    {
+1342          //       Delay_MS(20);
+1343          //       i = CH395GetCmdStatus();
+1344          //       if(i == CH395_ERR_BUSY)continue;
+1345          //       break;
+1346          //    }
+1347          //    return i;
+1348          //}
+1349            
+1350          /*******************************************************************************
+1351          * Function Name  : CH395EEPROMRead
+1352          * Description    : Ð´EEPROM
+1353          * Input          : eepaddr  EEPROMµØÖ·
+1354          *                £ºbuf      »º³åÇøµØÖ·
+1355          *                £ºlen      ³¤¶È
+1356          * Output         : None
+1357          * Return         : None
+1358          *******************************************************************************/
+1359          //void CH395EEPROMRead(unsigned short eepaddr,unsigned char *buf,unsigned char len)
+1360          //{
+1361          //    xWriteCH395Cmd(CMD30_EEPROM_READ);
+1362          //    xWriteCH395Data((unsigned char)(eepaddr));
+1363          //    xWriteCH395Data((unsigned char)(eepaddr >> 8));
+1364          //    xWriteCH395Data(len);  
+1365          //    Delay_MS(1);
+1366          //    while(len--)*buf++ = xReadCH395Data();
+1367          //}
+1368          
+1369          /*******************************************************************************
+1370          * Function Name  : CH395SetTCPMss
+1371          * Description    : ÉèÖÃTCP MSSÖµ
+1372          * Input          : tcpmss 
+1373          * Output         : None
+1374          * Return         : None
+1375          *******************************************************************************/
+1376          //void CH395SetTCPMss(unsigned short tcpmss)
+1377          //{
+1378          //    xWriteCH395Cmd(CMD20_SET_TCP_MSS);
+1379          //    xWriteCH395Data((unsigned char)(tcpmss));
+1380          //    xWriteCH395Data((unsigned char)(tcpmss >> 8));
+1381          //}
+1382          
+1383          /*******************************************************************************
+1384          * Function Name  : CH395SetSocketRecvBuf
+1385          * Description    : ÉèÖÃSocket½ÓÊÕ»º³åÇø
+1386          * Input          : sockindex  socketË÷Òý
+1387                           £ºstartblk   ÆðÊ¼µØÖ·
+1388                           £ºblknum     µ¥Î»»º³åÇø¸öÊý £¬µ¥Î»Îª512×Ö½Ú
+1389          * Output         : None
+1390          * Return         : None
+1391          *******************************************************************************/
+1392          //void CH395SetSocketRecvBuf(unsigned char sockindex,unsigned char startblk,unsigned char blknum)
+1393          //{
+1394          //    xWriteCH395Cmd(CMD30_SET_RECV_BUF);
+1395          //    xWriteCH395Data(sockindex);
+1396          //    xWriteCH395Data(startblk);
+1397          //    xWriteCH395Data(blknum);
+1398          //}
+1399          
+1400          /*******************************************************************************
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 24  
+
+1401          * Function Name  : CH395SetSocketSendBuf
+1402          * Description    : ÉèÖÃSocket·¢ËÍ»º³åÇø
+1403          * Input          : sockindex  socketË÷Òý
+1404                           £ºstartblk   ÆðÊ¼µØÖ·
+1405                           £ºblknum     µ¥Î»»º³åÇø¸öÊý
+1406          * Output         : None
+1407          * Return         : None
+1408          *******************************************************************************/
+1409          //void CH395SetSocketSendBuf(unsigned char sockindex,unsigned char startblk,unsigned char blknum)
+1410          //{
+1411          //    xWriteCH395Cmd(CMD30_SET_SEND_BUF);
+1412          //    xWriteCH395Data(sockindex);
+1413          //    xWriteCH395Data(startblk);
+1414          //    xWriteCH395Data(blknum);
+1415          //}
+1416          
+1417          /*******************************************************************************
+1418          * Function Name  : CH395UDPSendTo
+1419          * Description    : UDPÏòÖ¸¶¨µÄIPºÍ¶Ë¿Ú·¢ËÍÊý¾Ý
+1420          * Input          : buf     : ·¢ËÍÊý¾Ý»º³åÇø
+1421                             len     : ·¢ËÍÊý¾Ý³¤¶È
+1422                     ip      : Ä¿±êIP
+1423                     port    : Ä¿±ê¶Ë¿Ú
+1424                     sockeid : socketË÷ÒýÖµ
+1425          * Output         : None
+1426          * Return         : None
+1427          *******************************************************************************/
+1428          //void CH395UDPSendTo(unsigned char *buf,unsigned long len,unsigned char *ip,unsigned short port,unsigned 
+             -char sockindex)
+1429          //{
+1430          //    CH395SetSocketDesIP(sockindex,ip);                            /* ÉèÖÃsocket 0Ä¿±êIPµØÖ· */         
+1431          //    CH395SetSocketDesPort(sockindex,port);
+1432          //    CH395SendData(sockindex,buf,len);    
+1433          //}
+1434          
+1435          /*******************************************************************************
+1436          * Function Name  : CH395SetStartPara
+1437          * Description    : ÉèÖÃCH395Æô¶¯²ÎÊý
+1438          * Input          : mdata
+1439          * Output         : None
+1440          * Return         : None
+1441          *******************************************************************************
+1442          void CH395SetStartPara(unsigned long mdata)
+1443          {
+1444              xWriteCH395Cmd(CMD40_SET_FUN_PARA);
+1445              xWriteCH395Data((unsigned char)mdata);
+1446              xWriteCH395Data((unsigned char)((unsigned short)mdata>>8));
+1447              xWriteCH395Data((unsigned char)(mdata >> 16));
+1448              xWriteCH395Data((unsigned char)(mdata >> 24));
+1449          }
+1450          
+1451          /*******************************************************************************
+1452          * Function Name  : CH395CMDGetGlobIntStatus
+1453          * Description    : »ñÈ¡È«¾ÖÖÐ¶Ï×´Ì¬£¬ÊÕµ½´ËÃüÁîCH395×Ô¶¯È¡ÏûÖÐ¶Ï,0x44¼°ÒÔÉÏ°æ±¾Ê¹ÓÃ
+1454          * Input          : None
+1455          * Output         : None
+1456          * Return         : ·µ»Øµ±Ç°µÄÈ«¾ÖÖÐ¶Ï×´Ì¬
+1457          *******************************************************************************/
+1458          //unsigned short CH395CMDGetGlobIntStatus_ALL(void)
+1459          //{
+1460          //    unsigned short init_status;
+1461          //    xWriteCH395Cmd(CMD02_GET_GLOB_INT_STATUS_ALL);
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 25  
+
+1462          //    Delay_5US();
+1463          //    init_status = xReadCH395Data();
+1464          //    init_status = (unsigned short)(xReadCH395Data()<<8) + init_status;
+1465          //    xEndCH395Cmd();
+1466          //    return  init_status;
+1467          //}
+1468          
+1469          /*******************************************************************************
+1470          * Function Name  : CH395SetKeepLive
+1471          * Description    : ÉèÖÃkeepalive¹¦ÄÜ
+1472          * Input          : sockindex SocketºÅ
+1473          *                  cmd 0£º¹Ø±Õ 1£º¿ªÆô
+1474          * Output         : None
+1475          * Return         : None
+1476          *******************************************************************************/
+1477          void CH395SetKeepLive(unsigned char sockindex,unsigned char cmd)
+1478          {
+1479   1          xWriteCH395Cmd(CMD20_SET_KEEP_LIVE_SN);
+1480   1          xWriteCH395Data(sockindex);
+1481   1          xWriteCH395Data(cmd);
+1482   1      }
+1483          
+1484          /*******************************************************************************
+1485          * Function Name  : CH395KeepLiveCNT
+1486          * Description    : ÉèÖÃkeepaliveÖØÊÔ´ÎÊý
+1487          * Input          : cnt ÖØÊÔ´ÎÊý£¨£©
+1488          * Output         : None
+1489          * Return         : None
+1490          *******************************************************************************/
+1491          void CH395KeepLiveCNT(unsigned char cnt)
+1492          {
+1493   1          xWriteCH395Cmd(CMD10_SET_KEEP_LIVE_CNT);
+1494   1          xWriteCH395Data(cnt);
+1495   1      }
+1496          
+1497          /*******************************************************************************
+1498          * Function Name  : CH395KeepLiveIDLE
+1499          * Description    : ÉèÖÃKEEPLIVE¿ÕÏÐ
+1500          * Input          : idle ¿ÕÏÐÊ±¼ä£¨µ¥Î»£ºms£©
+1501          * Output         : None
+1502          * Return         : None
+1503          *******************************************************************************/
+1504          void CH395KeepLiveIDLE(unsigned long idle)
+1505          {
+1506   1          xWriteCH395Cmd(CMD40_SET_KEEP_LIVE_IDLE);
+1507   1          xWriteCH395Data((unsigned char)idle);
+1508   1          xWriteCH395Data((unsigned char)((unsigned short)idle>>8));
+1509   1          xWriteCH395Data((unsigned char)(idle >> 16));
+1510   1          xWriteCH395Data((unsigned char)(idle >> 24));
+1511   1      }
+1512          
+1513          /*******************************************************************************
+1514          * Function Name  : CH395KeepLiveINTVL
+1515          * Description    : ÉèÖÃKeepLive¼ä¸ôÊ±¼ä 
+1516          * Input          : intvl ¼ä¸ôÊ±¼ä£¨µ¥Î»£ºms£©
+1517          * Output         : None
+1518          * Return         : None
+1519          *******************************************************************************/
+1520          void CH395KeepLiveINTVL(unsigned long intvl)
+1521          {
+1522   1          xWriteCH395Cmd(CMD40_SET_KEEP_LIVE_INTVL);
+1523   1          xWriteCH395Data((unsigned char)intvl);
+C51 COMPILER V9.60.0.0   CH395CMD                                                          03/08/2023 13:17:58 PAGE 26  
+
+1524   1          xWriteCH395Data((unsigned char)((unsigned short)intvl>>8));
+1525   1          xWriteCH395Data((unsigned char)(intvl >> 16));
+1526   1          xWriteCH395Data((unsigned char)(intvl >> 24));
+1527   1      }
+1528          
+1529          /*******************************************************************************
+1530          * Function Name  : CH395SetTTLNum
+1531          * Description    : ÉèÖÃTTL
+1532          * Input          : sockindex SocketºÅ
+1533          *                  TTLnum:TTLÊý
+1534          * Output         : None
+1535          * Return         : None
+1536          *******************************************************************************/
+1537          //void CH395SetTTLNum(unsigned char sockindex,unsigned char TTLnum)
+1538          //{
+1539          //    xWriteCH395Cmd(CMD20_SET_TTL);
+1540          //    xWriteCH395Data(sockindex);
+1541          //    xWriteCH395Data(TTLnum);
+1542          //}
+1543          
+1544          
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  4 ERROR(S)
