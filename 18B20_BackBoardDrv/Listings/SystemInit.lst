@@ -1,0 +1,728 @@
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SYSTEMINIT
+OBJECT MODULE PLACED IN .\Objects\SystemInit.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE SystemInit.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND COD
+                    -E PRINT(.\Listings\SystemInit.lst) TABS(2) OBJECT(.\Objects\SystemInit.obj)
+
+line level    source
+
+   1          #include <SystemInit.h>
+   2          #include <DelayTime.h>
+   3          #include <pc.h>
+   4          #include <intrins.h>
+   5          #include <string.h>
+   6          
+   7          bit bStartFlag,bInitFlag,bRunModeFlag;
+   8          extern char xdata nRecieveData[200];    // 来源于 “DataTrans.c”
+   9          
+  10          void SystemInit(void)
+  11          {
+  12   1        P_SW2 |= 0x80; // EAXFR = 1,才可以访问位于外部RAM区的特殊功能寄存器
+  13   1        XOSCCR = 0xc0; // 外部晶振控制器，bit7 = 1 使能外部晶振，bit6 = 1 外部时钟源为晶体
+             -振荡器，晶振连接到P1.7和P1.6
+  14   1        while(!(XOSCCR & 0x01)); // 等待外部晶振稳定
+  15   1        CLKDIV = 0x00; // 系统时钟分频寄存器，0x00代表不分频
+  16   1        CKSEL = 0x01;  // 系统时钟选择控制寄存器，0x01选择外部晶振
+  17   1        P_SW2 = 0x00;
+  18   1        
+  19   1        P7 = 0xff;     // 断开所有测试板和DUT的电源
+  20   1        bStartFlag = 0x00;
+  21   1        bInitFlag = 0x00;
+  22   1        bRunModeFlag = 0x00;
+  23   1        
+  24   1        IT0 = 0x01; // INT0 仅下降沿中断
+  25   1        IT1 = 0x01; // INT1 仅下降沿中断
+  26   1        
+  27   1        EX0 = 0x00;
+  28   1        EX1 = 0x00;
+  29   1        EA = 0x01;
+  30   1        
+  31   1        P6M0 = 0xff;
+  32   1        P6M1 = 0x00;
+  33   1        
+  34   1        P7M0 = 0xff;
+  35   1        P7M1 = 0x00;
+  36   1        
+  37   1        P1M0 |= 0x02;
+  38   1        P1M1 &= 0xfd;
+  39   1      }
+  40          
+  41          void Delay100MS(void)
+  42          {
+  43   1        int cunt1 = 0,cunt2 = 0;
+  44   1        for(cunt1 = 0; cunt1 < 920; cunt1++)
+  45   1        {
+  46   2          for(cunt2 = 0; cunt2 < 200; cunt2++)
+  47   2          _nop_();
+  48   2        }
+  49   1      }
+  50          
+  51          void ScanPressKey() interrupt 0 using 3 // 按键
+  52          {
+  53   1        EX0 = 0x00; // 关闭串口中断，接下来采用查询方式接收数据
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 2   
+
+  54   1        while(1){
+  55   2          Delay100MS();
+  56   2          if(P32){ // 等待数据到
+  57   3            bStartFlag = 0x01;
+  58   3            break;
+  59   3          }
+  60   2        }
+  61   1      }
+  62          
+  63          void RecievePressKeyCommandFromPC() interrupt 4 using 3 //接收来自电脑端的开始命令，串口1
+  64          {
+  65   1        char nRxDataCunt = 0;
+  66   1        
+  67   1        ES = 0x00; // 关闭串口中断，接下来采用查询方式接收数据
+  68   1        while(1){
+  69   2          if(RI){ // 等待数据到
+  70   3            RI = 0;
+  71   3            
+  72   3            nRecieveData[nRxDataCunt] = SBUF; // 保存接收到的数据
+  73   3            if(nRecieveData[nRxDataCunt] == '@')
+  74   3            break;
+  75   3            
+  76   3            nRxDataCunt++;
+  77   3          }
+  78   2        }
+  79   1        
+  80   1        if((strstr(nRecieveData,"INIT") != NULL) ||
+  81   1           (strstr(nRecieveData,"init") != NULL) ||
+  82   1           (strstr(nRecieveData,"Init") != NULL)){ 
+  83   2          bInitFlag = 0x01;  
+  84   2        }
+  85   1           
+  86   1        if((strstr(nRecieveData,"START") != NULL) ||
+  87   1           (strstr(nRecieveData,"Start") != NULL) ||
+  88   1           (strstr(nRecieveData,"start") != NULL)){ 
+  89   2          bStartFlag = 0x01;
+  90   2        }
+  91   1        if(strstr(nRecieveData,"RunMode") != NULL){ 
+  92   2          bRunModeFlag = 0x01;
+  93   2        }   
+  94   1        if((strstr(nRecieveData,"STOP") != NULL) ||
+  95   1           (strstr(nRecieveData,"Stop") != NULL) ||
+  96   1           (strstr(nRecieveData,"stop") != NULL)){ 
+  97   2             IAP_CONTR |= 0x20; // 软件复位到用户区从头开始执行代码
+  98   2        }
+  99   1        if(strstr(nRecieveData,"NextStart") != NULL){ 
+ 100   2          IAP_CONTR |= 0x20; // 软件复位到用户区从头开始执行代码
+ 101   2        }
+ 102   1      }
+ 103          
+ 104          void StartProcess(void)
+ 105          {
+ 106   1        START = 0x01;
+ 107   1        Delay_MS(2);
+ 108   1        START = 0x00;
+ 109   1        Delay_MS(5);
+ 110   1        START = 0x01;
+ 111   1        Delay_MS(2);
+ 112   1      }
+ 113          
+ 114          void TrimingBoardCollector(void)
+ 115          {
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 3   
+
+ 116   1        COLLECTOR = 0x01;
+ 117   1        Delay_MS(2);
+ 118   1        COLLECTOR = 0x00;
+ 119   1        Delay_MS(5);
+ 120   1        COLLECTOR = 0x01;
+ 121   1        Delay_MS(2);
+ 122   1      }
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 4   
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+             ; FUNCTION SystemInit (BEGIN)
+                                           ; SOURCE LINE # 10
+                                           ; SOURCE LINE # 11
+                                           ; SOURCE LINE # 12
+0000 43BA80            ORL     P_SW2,#080H
+                                           ; SOURCE LINE # 13
+0003 90FE03            MOV     DPTR,#0FE03H
+0006 74C0              MOV     A,#0C0H
+0008 F0                MOVX    @DPTR,A
+0009         ?C0001:
+                                           ; SOURCE LINE # 14
+0009 90FE03            MOV     DPTR,#0FE03H
+000C E0                MOVX    A,@DPTR
+000D 30E0F9            JNB     ACC.0,?C0001
+                                           ; SOURCE LINE # 15
+0010 90FE01            MOV     DPTR,#0FE01H
+0013 E4                CLR     A
+0014 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 16
+0015 90FE00            MOV     DPTR,#0FE00H
+0018 04                INC     A
+0019 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 17
+001A E4                CLR     A
+001B F5BA              MOV     P_SW2,A
+                                           ; SOURCE LINE # 19
+001D 75F8FF            MOV     P7,#0FFH
+                                           ; SOURCE LINE # 20
+0020 C200        R     CLR     bStartFlag
+                                           ; SOURCE LINE # 21
+0022 C200        R     CLR     bInitFlag
+                                           ; SOURCE LINE # 22
+0024 C200        R     CLR     bRunModeFlag
+                                           ; SOURCE LINE # 24
+0026 D288              SETB    IT0
+                                           ; SOURCE LINE # 25
+0028 D28A              SETB    IT1
+                                           ; SOURCE LINE # 27
+002A C2A8              CLR     EX0
+                                           ; SOURCE LINE # 28
+002C C2AA              CLR     EX1
+                                           ; SOURCE LINE # 29
+002E D2AF              SETB    EA
+                                           ; SOURCE LINE # 31
+0030 75CCFF            MOV     P6M0,#0FFH
+                                           ; SOURCE LINE # 32
+0033 F5CB              MOV     P6M1,A
+                                           ; SOURCE LINE # 34
+0035 75E2FF            MOV     P7M0,#0FFH
+                                           ; SOURCE LINE # 35
+0038 F5E1              MOV     P7M1,A
+                                           ; SOURCE LINE # 37
+003A 439202            ORL     P1M0,#02H
+                                           ; SOURCE LINE # 38
+003D 5391FD            ANL     P1M1,#0FDH
+                                           ; SOURCE LINE # 39
+0040 22                RET     
+             ; FUNCTION SystemInit (END)
+
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 5   
+
+             ; FUNCTION Delay100MS (BEGIN)
+                                           ; SOURCE LINE # 41
+                                           ; SOURCE LINE # 42
+                                           ; SOURCE LINE # 43
+;---- Variable 'cunt1' assigned to Register 'R6/R7' ----
+0000 E4                CLR     A
+0001 FF                MOV     R7,A
+0002 FE                MOV     R6,A
+;---- Variable 'cunt2' assigned to Register 'R4/R5' ----
+0003 FD                MOV     R5,A
+0004 FC                MOV     R4,A
+                                           ; SOURCE LINE # 44
+0005         ?C0004:
+0005 C3                CLR     C
+0006 EF                MOV     A,R7
+0007 9498              SUBB    A,#098H
+0009 EE                MOV     A,R6
+000A 6480              XRL     A,#080H
+000C 9483              SUBB    A,#083H
+000E 501D              JNC     ?C0010
+                                           ; SOURCE LINE # 45
+                                           ; SOURCE LINE # 46
+0010 E4                CLR     A
+0011 FC                MOV     R4,A
+0012 FD                MOV     R5,A
+0013         ?C0007:
+0013 C3                CLR     C
+0014 ED                MOV     A,R5
+0015 94C8              SUBB    A,#0C8H
+0017 EC                MOV     A,R4
+0018 6480              XRL     A,#080H
+001A 9480              SUBB    A,#080H
+001C 5008              JNC     ?C0006
+                                           ; SOURCE LINE # 47
+001E 00                NOP     
+001F 0D                INC     R5
+0020 ED                MOV     A,R5
+0021 7001              JNZ     ?C0030
+0023 0C                INC     R4
+0024         ?C0030:
+0024 80ED              SJMP    ?C0007
+                                           ; SOURCE LINE # 48
+0026         ?C0006:
+0026 0F                INC     R7
+0027 EF                MOV     A,R7
+0028 7001              JNZ     ?C0031
+002A 0E                INC     R6
+002B         ?C0031:
+002B 80D8              SJMP    ?C0004
+                                           ; SOURCE LINE # 49
+002D         ?C0010:
+002D 22                RET     
+             ; FUNCTION Delay100MS (END)
+
+             ; FUNCTION ScanPressKey (BEGIN)
+0000 C0E0              PUSH    ACC
+0002 C0D0              PUSH    PSW
+0004 75D018            MOV     PSW,#018H
+                                           ; SOURCE LINE # 51
+                                           ; SOURCE LINE # 53
+0007 C2A8              CLR     EX0
+0009         ?C0011:
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 6   
+
+                                           ; SOURCE LINE # 54
+                                           ; SOURCE LINE # 55
+0009 120000      R     LCALL   Delay100MS
+                                           ; SOURCE LINE # 56
+000C 30B2FA            JNB     P32,?C0011
+                                           ; SOURCE LINE # 57
+000F D200        R     SETB    bStartFlag
+                                           ; SOURCE LINE # 58
+                                           ; SOURCE LINE # 59
+                                           ; SOURCE LINE # 60
+                                           ; SOURCE LINE # 61
+0011 D0D0              POP     PSW
+0013 D0E0              POP     ACC
+0015 32                RETI    
+             ; FUNCTION ScanPressKey (END)
+
+             ; FUNCTION RecievePressKeyCommandFromPC (BEGIN)
+0000 C0E0              PUSH    ACC
+0002 C0F0              PUSH    B
+0004 C083              PUSH    DPH
+0006 C082              PUSH    DPL
+0008 C0D0              PUSH    PSW
+000A 75D018            MOV     PSW,#018H
+                                           ; SOURCE LINE # 63
+                                           ; SOURCE LINE # 65
+;---- Variable 'nRxDataCunt' assigned to Register 'R7' ----
+000D E4                CLR     A
+000E FF                MOV     R7,A
+                                           ; SOURCE LINE # 67
+000F C2AC              CLR     ES
+0011         ?C0015:
+                                           ; SOURCE LINE # 68
+                                           ; SOURCE LINE # 69
+0011 3098FD            JNB     RI,?C0015
+                                           ; SOURCE LINE # 70
+0014 C298              CLR     RI
+                                           ; SOURCE LINE # 72
+0016 EF                MOV     A,R7
+0017 FD                MOV     R5,A
+0018 33                RLC     A
+0019 95E0              SUBB    A,ACC
+001B FC                MOV     R4,A
+001C 7400        E     MOV     A,#LOW nRecieveData
+001E 2D                ADD     A,R5
+001F F582              MOV     DPL,A
+0021 7400        E     MOV     A,#HIGH nRecieveData
+0023 3C                ADDC    A,R4
+0024 F583              MOV     DPH,A
+0026 E599              MOV     A,SBUF
+0028 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 73
+0029 EF                MOV     A,R7
+002A 33                RLC     A
+002B 95E0              SUBB    A,ACC
+002D FC                MOV     R4,A
+002E 7400        E     MOV     A,#LOW nRecieveData
+0030 2D                ADD     A,R5
+0031 F582              MOV     DPL,A
+0033 7400        E     MOV     A,#HIGH nRecieveData
+0035 3C                ADDC    A,R4
+0036 F583              MOV     DPH,A
+0038 E0                MOVX    A,@DPTR
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 7   
+
+0039 6440              XRL     A,#040H
+003B 6003              JZ      ?C0016
+                                           ; SOURCE LINE # 74
+                                           ; SOURCE LINE # 76
+003D 0F                INC     R7
+                                           ; SOURCE LINE # 77
+                                           ; SOURCE LINE # 78
+003E 80D1              SJMP    ?C0015
+0040         ?C0016:
+                                           ; SOURCE LINE # 82
+0040 7B01              MOV     R3,#01H
+0042 7A00        E     MOV     R2,#HIGH nRecieveData
+0044 7900        E     MOV     R1,#LOW nRecieveData
+0046 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+0049 74FF              MOV     A,#0FFH
+004B F0                MOVX    @DPTR,A
+004C A3                INC     DPTR
+004D 7400        R     MOV     A,#HIGH ?SC_0
+004F F0                MOVX    @DPTR,A
+0050 A3                INC     DPTR
+0051 7400        R     MOV     A,#LOW ?SC_0
+0053 F0                MOVX    @DPTR,A
+0054 120000      E     LCALL   _strstr
+0057 EB                MOV     A,R3
+0058 8A83              MOV     DPH,R2
+005A 8982              MOV     DPL,R1
+005C 7B00              MOV     R3,#00H
+005E 7A00              MOV     R2,#00H
+0060 7900              MOV     R1,#00H
+0062 7006              JNZ     ?C0032
+0064 E582              MOV     A,DPL
+0066 7002              JNZ     ?C0032
+0068 E583              MOV     A,DPH
+006A         ?C0032:
+006A 7058              JNZ     ?C0020
+006C 7B01              MOV     R3,#01H
+006E 7A00        E     MOV     R2,#HIGH nRecieveData
+0070 7900        E     MOV     R1,#LOW nRecieveData
+0072 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+0075 74FF              MOV     A,#0FFH
+0077 F0                MOVX    @DPTR,A
+0078 A3                INC     DPTR
+0079 7400        R     MOV     A,#HIGH ?SC_5
+007B F0                MOVX    @DPTR,A
+007C A3                INC     DPTR
+007D 7400        R     MOV     A,#LOW ?SC_5
+007F F0                MOVX    @DPTR,A
+0080 120000      E     LCALL   _strstr
+0083 EB                MOV     A,R3
+0084 8A83              MOV     DPH,R2
+0086 8982              MOV     DPL,R1
+0088 7B00              MOV     R3,#00H
+008A 7A00              MOV     R2,#00H
+008C 7900              MOV     R1,#00H
+008E 7006              JNZ     ?C0033
+0090 E582              MOV     A,DPL
+0092 7002              JNZ     ?C0033
+0094 E583              MOV     A,DPH
+0096         ?C0033:
+0096 702C              JNZ     ?C0020
+0098 7B01              MOV     R3,#01H
+009A 7A00        E     MOV     R2,#HIGH nRecieveData
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 8   
+
+009C 7900        E     MOV     R1,#LOW nRecieveData
+009E 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+00A1 74FF              MOV     A,#0FFH
+00A3 F0                MOVX    @DPTR,A
+00A4 A3                INC     DPTR
+00A5 7400        R     MOV     A,#HIGH ?SC_10
+00A7 F0                MOVX    @DPTR,A
+00A8 A3                INC     DPTR
+00A9 7400        R     MOV     A,#LOW ?SC_10
+00AB F0                MOVX    @DPTR,A
+00AC 120000      E     LCALL   _strstr
+00AF EB                MOV     A,R3
+00B0 8A83              MOV     DPH,R2
+00B2 8982              MOV     DPL,R1
+00B4 7B00              MOV     R3,#00H
+00B6 7A00              MOV     R2,#00H
+00B8 7900              MOV     R1,#00H
+00BA 7006              JNZ     ?C0034
+00BC E582              MOV     A,DPL
+00BE 7002              JNZ     ?C0034
+00C0 E583              MOV     A,DPH
+00C2         ?C0034:
+00C2 6002              JZ      ?C0019
+00C4         ?C0020:
+                                           ; SOURCE LINE # 83
+00C4 D200        R     SETB    bInitFlag
+                                           ; SOURCE LINE # 84
+00C6         ?C0019:
+                                           ; SOURCE LINE # 88
+00C6 7B01              MOV     R3,#01H
+00C8 7A00        E     MOV     R2,#HIGH nRecieveData
+00CA 7900        E     MOV     R1,#LOW nRecieveData
+00CC 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+00CF 74FF              MOV     A,#0FFH
+00D1 F0                MOVX    @DPTR,A
+00D2 A3                INC     DPTR
+00D3 7400        R     MOV     A,#HIGH ?SC_15
+00D5 F0                MOVX    @DPTR,A
+00D6 A3                INC     DPTR
+00D7 7400        R     MOV     A,#LOW ?SC_15
+00D9 F0                MOVX    @DPTR,A
+00DA 120000      E     LCALL   _strstr
+00DD EB                MOV     A,R3
+00DE 8A83              MOV     DPH,R2
+00E0 8982              MOV     DPL,R1
+00E2 7B00              MOV     R3,#00H
+00E4 7A00              MOV     R2,#00H
+00E6 7900              MOV     R1,#00H
+00E8 7006              JNZ     ?C0035
+00EA E582              MOV     A,DPL
+00EC 7002              JNZ     ?C0035
+00EE E583              MOV     A,DPH
+00F0         ?C0035:
+00F0 7058              JNZ     ?C0022
+00F2 7B01              MOV     R3,#01H
+00F4 7A00        E     MOV     R2,#HIGH nRecieveData
+00F6 7900        E     MOV     R1,#LOW nRecieveData
+00F8 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+00FB 74FF              MOV     A,#0FFH
+00FD F0                MOVX    @DPTR,A
+00FE A3                INC     DPTR
+00FF 7400        R     MOV     A,#HIGH ?SC_21
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 9   
+
+0101 F0                MOVX    @DPTR,A
+0102 A3                INC     DPTR
+0103 7400        R     MOV     A,#LOW ?SC_21
+0105 F0                MOVX    @DPTR,A
+0106 120000      E     LCALL   _strstr
+0109 EB                MOV     A,R3
+010A 8A83              MOV     DPH,R2
+010C 8982              MOV     DPL,R1
+010E 7B00              MOV     R3,#00H
+0110 7A00              MOV     R2,#00H
+0112 7900              MOV     R1,#00H
+0114 7006              JNZ     ?C0036
+0116 E582              MOV     A,DPL
+0118 7002              JNZ     ?C0036
+011A E583              MOV     A,DPH
+011C         ?C0036:
+011C 702C              JNZ     ?C0022
+011E 7B01              MOV     R3,#01H
+0120 7A00        E     MOV     R2,#HIGH nRecieveData
+0122 7900        E     MOV     R1,#LOW nRecieveData
+0124 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+0127 74FF              MOV     A,#0FFH
+0129 F0                MOVX    @DPTR,A
+012A A3                INC     DPTR
+012B 7400        R     MOV     A,#HIGH ?SC_27
+012D F0                MOVX    @DPTR,A
+012E A3                INC     DPTR
+012F 7400        R     MOV     A,#LOW ?SC_27
+0131 F0                MOVX    @DPTR,A
+0132 120000      E     LCALL   _strstr
+0135 EB                MOV     A,R3
+0136 8A83              MOV     DPH,R2
+0138 8982              MOV     DPL,R1
+013A 7B00              MOV     R3,#00H
+013C 7A00              MOV     R2,#00H
+013E 7900              MOV     R1,#00H
+0140 7006              JNZ     ?C0037
+0142 E582              MOV     A,DPL
+0144 7002              JNZ     ?C0037
+0146 E583              MOV     A,DPH
+0148         ?C0037:
+0148 6002              JZ      ?C0021
+014A         ?C0022:
+                                           ; SOURCE LINE # 89
+014A D200        R     SETB    bStartFlag
+                                           ; SOURCE LINE # 90
+014C         ?C0021:
+                                           ; SOURCE LINE # 91
+014C 7B01              MOV     R3,#01H
+014E 7A00        E     MOV     R2,#HIGH nRecieveData
+0150 7900        E     MOV     R1,#LOW nRecieveData
+0152 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+0155 74FF              MOV     A,#0FFH
+0157 F0                MOVX    @DPTR,A
+0158 A3                INC     DPTR
+0159 7400        R     MOV     A,#HIGH ?SC_33
+015B F0                MOVX    @DPTR,A
+015C A3                INC     DPTR
+015D 7400        R     MOV     A,#LOW ?SC_33
+015F F0                MOVX    @DPTR,A
+0160 120000      E     LCALL   _strstr
+0163 EB                MOV     A,R3
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 10  
+
+0164 8A83              MOV     DPH,R2
+0166 8982              MOV     DPL,R1
+0168 7B00              MOV     R3,#00H
+016A 7A00              MOV     R2,#00H
+016C 7900              MOV     R1,#00H
+016E 7006              JNZ     ?C0038
+0170 E582              MOV     A,DPL
+0172 7002              JNZ     ?C0038
+0174 E583              MOV     A,DPH
+0176         ?C0038:
+0176 6002              JZ      ?C0023
+                                           ; SOURCE LINE # 92
+0178 D200        R     SETB    bRunModeFlag
+                                           ; SOURCE LINE # 93
+017A         ?C0023:
+                                           ; SOURCE LINE # 96
+017A 7B01              MOV     R3,#01H
+017C 7A00        E     MOV     R2,#HIGH nRecieveData
+017E 7900        E     MOV     R1,#LOW nRecieveData
+0180 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+0183 74FF              MOV     A,#0FFH
+0185 F0                MOVX    @DPTR,A
+0186 A3                INC     DPTR
+0187 7400        R     MOV     A,#HIGH ?SC_41
+0189 F0                MOVX    @DPTR,A
+018A A3                INC     DPTR
+018B 7400        R     MOV     A,#LOW ?SC_41
+018D F0                MOVX    @DPTR,A
+018E 120000      E     LCALL   _strstr
+0191 EB                MOV     A,R3
+0192 8A83              MOV     DPH,R2
+0194 8982              MOV     DPL,R1
+0196 7B00              MOV     R3,#00H
+0198 7A00              MOV     R2,#00H
+019A 7900              MOV     R1,#00H
+019C 7006              JNZ     ?C0039
+019E E582              MOV     A,DPL
+01A0 7002              JNZ     ?C0039
+01A2 E583              MOV     A,DPH
+01A4         ?C0039:
+01A4 7058              JNZ     ?C0025
+01A6 7B01              MOV     R3,#01H
+01A8 7A00        E     MOV     R2,#HIGH nRecieveData
+01AA 7900        E     MOV     R1,#LOW nRecieveData
+01AC 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+01AF 74FF              MOV     A,#0FFH
+01B1 F0                MOVX    @DPTR,A
+01B2 A3                INC     DPTR
+01B3 7400        R     MOV     A,#HIGH ?SC_46
+01B5 F0                MOVX    @DPTR,A
+01B6 A3                INC     DPTR
+01B7 7400        R     MOV     A,#LOW ?SC_46
+01B9 F0                MOVX    @DPTR,A
+01BA 120000      E     LCALL   _strstr
+01BD EB                MOV     A,R3
+01BE 8A83              MOV     DPH,R2
+01C0 8982              MOV     DPL,R1
+01C2 7B00              MOV     R3,#00H
+01C4 7A00              MOV     R2,#00H
+01C6 7900              MOV     R1,#00H
+01C8 7006              JNZ     ?C0040
+01CA E582              MOV     A,DPL
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 11  
+
+01CC 7002              JNZ     ?C0040
+01CE E583              MOV     A,DPH
+01D0         ?C0040:
+01D0 702C              JNZ     ?C0025
+01D2 7B01              MOV     R3,#01H
+01D4 7A00        E     MOV     R2,#HIGH nRecieveData
+01D6 7900        E     MOV     R1,#LOW nRecieveData
+01D8 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+01DB 74FF              MOV     A,#0FFH
+01DD F0                MOVX    @DPTR,A
+01DE A3                INC     DPTR
+01DF 7400        R     MOV     A,#HIGH ?SC_51
+01E1 F0                MOVX    @DPTR,A
+01E2 A3                INC     DPTR
+01E3 7400        R     MOV     A,#LOW ?SC_51
+01E5 F0                MOVX    @DPTR,A
+01E6 120000      E     LCALL   _strstr
+01E9 EB                MOV     A,R3
+01EA 8A83              MOV     DPH,R2
+01EC 8982              MOV     DPL,R1
+01EE 7B00              MOV     R3,#00H
+01F0 7A00              MOV     R2,#00H
+01F2 7900              MOV     R1,#00H
+01F4 7006              JNZ     ?C0041
+01F6 E582              MOV     A,DPL
+01F8 7002              JNZ     ?C0041
+01FA E583              MOV     A,DPH
+01FC         ?C0041:
+01FC 6003              JZ      ?C0024
+01FE         ?C0025:
+                                           ; SOURCE LINE # 97
+01FE 43C720            ORL     IAP_CONTR,#020H
+                                           ; SOURCE LINE # 98
+0201         ?C0024:
+                                           ; SOURCE LINE # 99
+0201 7B01              MOV     R3,#01H
+0203 7A00        E     MOV     R2,#HIGH nRecieveData
+0205 7900        E     MOV     R1,#LOW nRecieveData
+0207 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+020A 74FF              MOV     A,#0FFH
+020C F0                MOVX    @DPTR,A
+020D A3                INC     DPTR
+020E 7400        R     MOV     A,#HIGH ?SC_56
+0210 F0                MOVX    @DPTR,A
+0211 A3                INC     DPTR
+0212 7400        R     MOV     A,#LOW ?SC_56
+0214 F0                MOVX    @DPTR,A
+0215 120000      E     LCALL   _strstr
+0218 EB                MOV     A,R3
+0219 8A83              MOV     DPH,R2
+021B 8982              MOV     DPL,R1
+021D 7B00              MOV     R3,#00H
+021F 7A00              MOV     R2,#00H
+0221 7900              MOV     R1,#00H
+0223 7006              JNZ     ?C0042
+0225 E582              MOV     A,DPL
+0227 7002              JNZ     ?C0042
+0229 E583              MOV     A,DPH
+022B         ?C0042:
+022B 6003              JZ      ?C0027
+                                           ; SOURCE LINE # 100
+022D 43C720            ORL     IAP_CONTR,#020H
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 12  
+
+                                           ; SOURCE LINE # 101
+                                           ; SOURCE LINE # 102
+0230         ?C0027:
+0230 D0D0              POP     PSW
+0232 D082              POP     DPL
+0234 D083              POP     DPH
+0236 D0F0              POP     B
+0238 D0E0              POP     ACC
+023A 32                RETI    
+             ; FUNCTION RecievePressKeyCommandFromPC (END)
+
+             ; FUNCTION StartProcess (BEGIN)
+                                           ; SOURCE LINE # 104
+                                           ; SOURCE LINE # 105
+                                           ; SOURCE LINE # 106
+0000 D2A6              SETB    START
+                                           ; SOURCE LINE # 107
+0002 7F02              MOV     R7,#02H
+0004 7E00              MOV     R6,#00H
+0006 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 108
+0009 C2A6              CLR     START
+                                           ; SOURCE LINE # 109
+000B 7F05              MOV     R7,#05H
+000D 7E00              MOV     R6,#00H
+000F 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 110
+0012 D2A6              SETB    START
+                                           ; SOURCE LINE # 111
+0014 7F02              MOV     R7,#02H
+0016 7E00              MOV     R6,#00H
+0018 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 112
+001B 22                RET     
+             ; FUNCTION StartProcess (END)
+
+             ; FUNCTION TrimingBoardCollector (BEGIN)
+                                           ; SOURCE LINE # 114
+                                           ; SOURCE LINE # 115
+                                           ; SOURCE LINE # 116
+0000 D2A7              SETB    COLLECTOR
+                                           ; SOURCE LINE # 117
+0002 7F02              MOV     R7,#02H
+0004 7E00              MOV     R6,#00H
+0006 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 118
+0009 C2A7              CLR     COLLECTOR
+                                           ; SOURCE LINE # 119
+000B 7F05              MOV     R7,#05H
+000D 7E00              MOV     R6,#00H
+000F 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 120
+0012 D2A7              SETB    COLLECTOR
+                                           ; SOURCE LINE # 121
+0014 7F02              MOV     R7,#02H
+0016 7E00              MOV     R6,#00H
+0018 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 122
+001B 22                RET     
+             ; FUNCTION TrimingBoardCollector (END)
+
+
+C51 COMPILER V9.60.0.0   SYSTEMINIT                                                        05/06/2023 12:12:06 PAGE 13  
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    760    ----
+   CONSTANT SIZE    =     66    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

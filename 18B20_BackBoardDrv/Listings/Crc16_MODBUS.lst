@@ -1,0 +1,555 @@
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE CRC16_MODBUS
+OBJECT MODULE PLACED IN .\Objects\Crc16_MODBUS.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE Crc16_MODBUS.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND C
+                    -ODE PRINT(.\Listings\Crc16_MODBUS.lst) TABS(2) OBJECT(.\Objects\Crc16_MODBUS.obj)
+
+line level    source
+
+   1          #include <Crc16_MODBUS.h>
+   2          
+   3          void InvertUint8(unsigned char *dBuf,unsigned char *srcBuf)  
+   4          {  
+   5   1          int i;  
+   6   1          unsigned char tmp[4];  
+   7   1          tmp[0] = 0;  
+   8   1          for(i=0; i< 8; i++)  
+   9   1          {  
+  10   2            if(srcBuf[0] & (1 << i))  
+  11   2              tmp[0]|=1<<(7-i);  
+  12   2          }  
+  13   1          dBuf[0] = tmp[0];  
+  14   1      }
+  15          
+  16          void InvertUint16(unsigned int *dBuf,unsigned int *srcBuf)  
+  17          {  
+  18   1          int i;  
+  19   1          unsigned int tmp[4];  
+  20   1          tmp[0] = 0;  
+  21   1          for(i=0;i< 16;i++)  
+  22   1          {  
+  23   2            if(srcBuf[0]& (1 << i))  
+  24   2              tmp[0]|=1<<(15 - i);  
+  25   2          }  
+  26   1          dBuf[0] = tmp[0];  
+  27   1      }
+  28          
+  29          unsigned int CRC16_MODBUS(unsigned char *puchMsg, unsigned int usDataLen)  
+  30          {  
+  31   1        unsigned int wCRCin = 0xFFFF;  
+  32   1        unsigned int wCPoly = 0x8005;  
+  33   1        unsigned char wChar = 0; 
+  34   1        int i;
+  35   1          
+  36   1        while (usDataLen--)     
+  37   1        {  
+  38   2              wChar = *(puchMsg++);  
+  39   2              InvertUint8(&wChar,&wChar);  
+  40   2              wCRCin ^= (wChar << 8);  
+  41   2              for(i = 0; i < 8; i++)  
+  42   2              {  
+  43   3                if(wCRCin & 0x8000)  
+  44   3                  wCRCin = (wCRCin << 1) ^ wCPoly;  
+  45   3                else  
+  46   3                  wCRCin = wCRCin << 1;  
+  47   3              }  
+  48   2        } 
+  49   1        
+  50   1        InvertUint16(&wCRCin,&wCRCin);  
+  51   1        return (wCRCin);  
+  52   1      }
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 2   
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+             ; FUNCTION _InvertUint8 (BEGIN)
+                                           ; SOURCE LINE # 3
+0000 900000      R     MOV     DPTR,#dBuf
+0003 EB                MOV     A,R3
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EA                MOV     A,R2
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 E9                MOV     A,R1
+000A F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 4
+                                           ; SOURCE LINE # 7
+000B E4                CLR     A
+000C 900000      R     MOV     DPTR,#tmp
+000F F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 8
+0010 900000      R     MOV     DPTR,#i
+0013 F0                MOVX    @DPTR,A
+0014 A3                INC     DPTR
+0015 F0                MOVX    @DPTR,A
+0016         ?C0001:
+0016 C3                CLR     C
+0017 900000      R     MOV     DPTR,#i+01H
+001A E0                MOVX    A,@DPTR
+001B 9408              SUBB    A,#08H
+001D 900000      R     MOV     DPTR,#i
+0020 E0                MOVX    A,@DPTR
+0021 6480              XRL     A,#080H
+0023 9480              SUBB    A,#080H
+0025 5061              JNC     ?C0002
+                                           ; SOURCE LINE # 9
+                                           ; SOURCE LINE # 10
+0027 900000      R     MOV     DPTR,#srcBuf
+002A E0                MOVX    A,@DPTR
+002B FB                MOV     R3,A
+002C A3                INC     DPTR
+002D E0                MOVX    A,@DPTR
+002E FA                MOV     R2,A
+002F A3                INC     DPTR
+0030 E0                MOVX    A,@DPTR
+0031 F9                MOV     R1,A
+0032 120000      E     LCALL   ?C?CLDPTR
+0035 FD                MOV     R5,A
+0036 7C00              MOV     R4,#00H
+0038 900000      R     MOV     DPTR,#i
+003B E0                MOVX    A,@DPTR
+003C A3                INC     DPTR
+003D E0                MOVX    A,@DPTR
+003E FF                MOV     R7,A
+003F 7E00              MOV     R6,#00H
+0041 7401              MOV     A,#01H
+0043 A807              MOV     R0,AR7
+0045 08                INC     R0
+0046 8005              SJMP    ?C0020
+0048         ?C0019:
+0048 C3                CLR     C
+0049 33                RLC     A
+004A CE                XCH     A,R6
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 3   
+
+004B 33                RLC     A
+004C CE                XCH     A,R6
+004D         ?C0020:
+004D D8F9              DJNZ    R0,?C0019
+004F FF                MOV     R7,A
+0050 EE                MOV     A,R6
+0051 5C                ANL     A,R4
+0052 FE                MOV     R6,A
+0053 EF                MOV     A,R7
+0054 5D                ANL     A,R5
+0055 4E                ORL     A,R6
+0056 6020              JZ      ?C0003
+                                           ; SOURCE LINE # 11
+0058 900000      R     MOV     DPTR,#tmp
+005B E0                MOVX    A,@DPTR
+005C FF                MOV     R7,A
+005D 900000      R     MOV     DPTR,#i
+0060 E0                MOVX    A,@DPTR
+0061 A3                INC     DPTR
+0062 E0                MOVX    A,@DPTR
+0063 FE                MOV     R6,A
+0064 C3                CLR     C
+0065 7407              MOV     A,#07H
+0067 9E                SUBB    A,R6
+0068 FE                MOV     R6,A
+0069 F8                MOV     R0,A
+006A 7401              MOV     A,#01H
+006C 08                INC     R0
+006D 8002              SJMP    ?C0022
+006F         ?C0021:
+006F C3                CLR     C
+0070 33                RLC     A
+0071         ?C0022:
+0071 D8FC              DJNZ    R0,?C0021
+0073 4F                ORL     A,R7
+0074 900000      R     MOV     DPTR,#tmp
+0077 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 12
+0078         ?C0003:
+0078 900000      R     MOV     DPTR,#i+01H
+007B E0                MOVX    A,@DPTR
+007C 04                INC     A
+007D F0                MOVX    @DPTR,A
+007E 7006              JNZ     ?C0023
+0080 900000      R     MOV     DPTR,#i
+0083 E0                MOVX    A,@DPTR
+0084 04                INC     A
+0085 F0                MOVX    @DPTR,A
+0086         ?C0023:
+0086 808E              SJMP    ?C0001
+0088         ?C0002:
+                                           ; SOURCE LINE # 13
+0088 900000      R     MOV     DPTR,#tmp
+008B E0                MOVX    A,@DPTR
+008C FF                MOV     R7,A
+008D 900000      R     MOV     DPTR,#dBuf
+0090 E0                MOVX    A,@DPTR
+0091 FB                MOV     R3,A
+0092 A3                INC     DPTR
+0093 E0                MOVX    A,@DPTR
+0094 FA                MOV     R2,A
+0095 A3                INC     DPTR
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 4   
+
+0096 E0                MOVX    A,@DPTR
+0097 F9                MOV     R1,A
+0098 EF                MOV     A,R7
+0099 120000      E     LCALL   ?C?CSTPTR
+                                           ; SOURCE LINE # 14
+009C 22                RET     
+             ; FUNCTION _InvertUint8 (END)
+
+             ; FUNCTION _InvertUint16 (BEGIN)
+                                           ; SOURCE LINE # 16
+0000 900000      R     MOV     DPTR,#dBuf
+0003 EB                MOV     A,R3
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EA                MOV     A,R2
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 E9                MOV     A,R1
+000A F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 17
+                                           ; SOURCE LINE # 20
+000B E4                CLR     A
+000C 900000      R     MOV     DPTR,#tmp
+000F F0                MOVX    @DPTR,A
+0010 A3                INC     DPTR
+0011 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 21
+0012 900000      R     MOV     DPTR,#i
+0015 F0                MOVX    @DPTR,A
+0016 A3                INC     DPTR
+0017 F0                MOVX    @DPTR,A
+0018         ?C0006:
+0018 C3                CLR     C
+0019 900000      R     MOV     DPTR,#i+01H
+001C E0                MOVX    A,@DPTR
+001D 9410              SUBB    A,#010H
+001F 900000      R     MOV     DPTR,#i
+0022 E0                MOVX    A,@DPTR
+0023 6480              XRL     A,#080H
+0025 9480              SUBB    A,#080H
+0027 5068              JNC     ?C0007
+                                           ; SOURCE LINE # 22
+                                           ; SOURCE LINE # 23
+0029 900000      R     MOV     DPTR,#srcBuf
+002C E0                MOVX    A,@DPTR
+002D FB                MOV     R3,A
+002E A3                INC     DPTR
+002F E0                MOVX    A,@DPTR
+0030 FA                MOV     R2,A
+0031 A3                INC     DPTR
+0032 E0                MOVX    A,@DPTR
+0033 F9                MOV     R1,A
+0034 120000      E     LCALL   ?C?ILDPTR
+0037 FD                MOV     R5,A
+0038 ACF0              MOV     R4,B
+003A 900000      R     MOV     DPTR,#i
+003D E0                MOVX    A,@DPTR
+003E A3                INC     DPTR
+003F E0                MOVX    A,@DPTR
+0040 FF                MOV     R7,A
+0041 7E00              MOV     R6,#00H
+0043 7401              MOV     A,#01H
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 5   
+
+0045 A807              MOV     R0,AR7
+0047 08                INC     R0
+0048 8005              SJMP    ?C0025
+004A         ?C0024:
+004A C3                CLR     C
+004B 33                RLC     A
+004C CE                XCH     A,R6
+004D 33                RLC     A
+004E CE                XCH     A,R6
+004F         ?C0025:
+004F D8F9              DJNZ    R0,?C0024
+0051 FF                MOV     R7,A
+0052 EE                MOV     A,R6
+0053 5C                ANL     A,R4
+0054 FE                MOV     R6,A
+0055 EF                MOV     A,R7
+0056 5D                ANL     A,R5
+0057 4E                ORL     A,R6
+0058 6027              JZ      ?C0008
+                                           ; SOURCE LINE # 24
+005A 900000      R     MOV     DPTR,#i
+005D E0                MOVX    A,@DPTR
+005E A3                INC     DPTR
+005F E0                MOVX    A,@DPTR
+0060 FF                MOV     R7,A
+0061 C3                CLR     C
+0062 740F              MOV     A,#0FH
+0064 9F                SUBB    A,R7
+0065 FF                MOV     R7,A
+0066 7E00              MOV     R6,#00H
+0068 7401              MOV     A,#01H
+006A A807              MOV     R0,AR7
+006C 08                INC     R0
+006D 8005              SJMP    ?C0027
+006F         ?C0026:
+006F C3                CLR     C
+0070 33                RLC     A
+0071 CE                XCH     A,R6
+0072 33                RLC     A
+0073 CE                XCH     A,R6
+0074         ?C0027:
+0074 D8F9              DJNZ    R0,?C0026
+0076 FF                MOV     R7,A
+0077 900000      R     MOV     DPTR,#tmp
+007A E0                MOVX    A,@DPTR
+007B 4E                ORL     A,R6
+007C F0                MOVX    @DPTR,A
+007D A3                INC     DPTR
+007E E0                MOVX    A,@DPTR
+007F 4F                ORL     A,R7
+0080 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 25
+0081         ?C0008:
+0081 900000      R     MOV     DPTR,#i+01H
+0084 E0                MOVX    A,@DPTR
+0085 04                INC     A
+0086 F0                MOVX    @DPTR,A
+0087 7006              JNZ     ?C0028
+0089 900000      R     MOV     DPTR,#i
+008C E0                MOVX    A,@DPTR
+008D 04                INC     A
+008E F0                MOVX    @DPTR,A
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 6   
+
+008F         ?C0028:
+008F 8087              SJMP    ?C0006
+0091         ?C0007:
+                                           ; SOURCE LINE # 26
+0091 900000      R     MOV     DPTR,#tmp
+0094 E0                MOVX    A,@DPTR
+0095 F9                MOV     R1,A
+0096 A3                INC     DPTR
+0097 E0                MOVX    A,@DPTR
+0098 FF                MOV     R7,A
+0099 900000      R     MOV     DPTR,#dBuf
+009C E0                MOVX    A,@DPTR
+009D FB                MOV     R3,A
+009E A3                INC     DPTR
+009F E0                MOVX    A,@DPTR
+00A0 FA                MOV     R2,A
+00A1 A3                INC     DPTR
+00A2 E0                MOVX    A,@DPTR
+00A3 C9                XCH     A,R1
+00A4 8FF0              MOV     B,R7
+00A6 120000      E     LCALL   ?C?ISTPTR
+                                           ; SOURCE LINE # 27
+00A9 22                RET     
+             ; FUNCTION _InvertUint16 (END)
+
+             ; FUNCTION _CRC16_MODBUS (BEGIN)
+                                           ; SOURCE LINE # 29
+0000 900000      R     MOV     DPTR,#puchMsg
+0003 EB                MOV     A,R3
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EA                MOV     A,R2
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 E9                MOV     A,R1
+000A F0                MOVX    @DPTR,A
+000B A3                INC     DPTR
+000C EC                MOV     A,R4
+000D F0                MOVX    @DPTR,A
+000E A3                INC     DPTR
+000F ED                MOV     A,R5
+0010 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 30
+                                           ; SOURCE LINE # 31
+0011 74FF              MOV     A,#0FFH
+0013 A3                INC     DPTR
+0014 F0                MOVX    @DPTR,A
+0015 A3                INC     DPTR
+0016 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 32
+0017 A3                INC     DPTR
+0018 7480              MOV     A,#080H
+001A F0                MOVX    @DPTR,A
+001B A3                INC     DPTR
+001C 7405              MOV     A,#05H
+001E F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 33
+001F E4                CLR     A
+0020 A3                INC     DPTR
+0021 F0                MOVX    @DPTR,A
+0022         ?C0011:
+                                           ; SOURCE LINE # 36
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 7   
+
+0022 900000      R     MOV     DPTR,#usDataLen
+0025 74FF              MOV     A,#0FFH
+0027 F5F0              MOV     B,A
+0029 120000      E     LCALL   ?C?ILDIX
+002C 45F0              ORL     A,B
+002E 7003              JNZ     $ + 5H
+0030 020000      R     LJMP    ?C0012
+                                           ; SOURCE LINE # 37
+                                           ; SOURCE LINE # 38
+0033 900000      R     MOV     DPTR,#puchMsg
+0036 E0                MOVX    A,@DPTR
+0037 FB                MOV     R3,A
+0038 A3                INC     DPTR
+0039 E4                CLR     A
+003A 75F001            MOV     B,#01H
+003D 120000      E     LCALL   ?C?ILDIX
+0040 A9F0              MOV     R1,B
+0042 FA                MOV     R2,A
+0043 120000      E     LCALL   ?C?CLDPTR
+0046 900000      R     MOV     DPTR,#wChar
+0049 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 39
+004A 7B01              MOV     R3,#01H
+004C 7A00        R     MOV     R2,#HIGH wChar
+004E 7900        R     MOV     R1,#LOW wChar
+0050 C003              PUSH    AR3
+0052 C002              PUSH    AR2
+0054 C001              PUSH    AR1
+0056 900000      R     MOV     DPTR,#?_InvertUint8?BYTE+03H
+0059 EB                MOV     A,R3
+005A F0                MOVX    @DPTR,A
+005B A3                INC     DPTR
+005C EA                MOV     A,R2
+005D F0                MOVX    @DPTR,A
+005E A3                INC     DPTR
+005F E9                MOV     A,R1
+0060 F0                MOVX    @DPTR,A
+0061 D001              POP     AR1
+0063 D002              POP     AR2
+0065 D003              POP     AR3
+0067 120000      R     LCALL   _InvertUint8
+                                           ; SOURCE LINE # 40
+006A 900000      R     MOV     DPTR,#wChar
+006D E0                MOVX    A,@DPTR
+006E FE                MOV     R6,A
+006F 900000      R     MOV     DPTR,#wCRCin
+0072 E0                MOVX    A,@DPTR
+0073 6E                XRL     A,R6
+0074 F0                MOVX    @DPTR,A
+0075 A3                INC     DPTR
+0076 E0                MOVX    A,@DPTR
+0077 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 41
+0078 E4                CLR     A
+0079 900000      R     MOV     DPTR,#i
+007C F0                MOVX    @DPTR,A
+007D A3                INC     DPTR
+007E F0                MOVX    @DPTR,A
+007F         ?C0013:
+007F C3                CLR     C
+0080 900000      R     MOV     DPTR,#i+01H
+0083 E0                MOVX    A,@DPTR
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 8   
+
+0084 9408              SUBB    A,#08H
+0086 900000      R     MOV     DPTR,#i
+0089 E0                MOVX    A,@DPTR
+008A 6480              XRL     A,#080H
+008C 9480              SUBB    A,#080H
+008E 5092              JNC     ?C0011
+                                           ; SOURCE LINE # 42
+                                           ; SOURCE LINE # 43
+0090 900000      R     MOV     DPTR,#wCRCin
+0093 E0                MOVX    A,@DPTR
+0094 A3                INC     DPTR
+0095 30E71E            JNB     ACC.7,?C0016
+                                           ; SOURCE LINE # 44
+0098 E0                MOVX    A,@DPTR
+0099 25E0              ADD     A,ACC
+009B FF                MOV     R7,A
+009C 900000      R     MOV     DPTR,#wCRCin
+009F E0                MOVX    A,@DPTR
+00A0 33                RLC     A
+00A1 FE                MOV     R6,A
+00A2 900000      R     MOV     DPTR,#wCPoly
+00A5 E0                MOVX    A,@DPTR
+00A6 6E                XRL     A,R6
+00A7 FE                MOV     R6,A
+00A8 A3                INC     DPTR
+00A9 E0                MOVX    A,@DPTR
+00AA 6F                XRL     A,R7
+00AB FF                MOV     R7,A
+00AC 900000      R     MOV     DPTR,#wCRCin
+00AF EE                MOV     A,R6
+00B0 F0                MOVX    @DPTR,A
+00B1 A3                INC     DPTR
+00B2 EF                MOV     A,R7
+00B3 F0                MOVX    @DPTR,A
+00B4 800D              SJMP    ?C0015
+00B6         ?C0016:
+                                           ; SOURCE LINE # 46
+00B6 900000      R     MOV     DPTR,#wCRCin+01H
+00B9 E0                MOVX    A,@DPTR
+00BA 25E0              ADD     A,ACC
+00BC F0                MOVX    @DPTR,A
+00BD 900000      R     MOV     DPTR,#wCRCin
+00C0 E0                MOVX    A,@DPTR
+00C1 33                RLC     A
+00C2 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 47
+00C3         ?C0015:
+00C3 900000      R     MOV     DPTR,#i+01H
+00C6 E0                MOVX    A,@DPTR
+00C7 04                INC     A
+00C8 F0                MOVX    @DPTR,A
+00C9 7006              JNZ     ?C0029
+00CB 900000      R     MOV     DPTR,#i
+00CE E0                MOVX    A,@DPTR
+00CF 04                INC     A
+00D0 F0                MOVX    @DPTR,A
+00D1         ?C0029:
+00D1 80AC              SJMP    ?C0013
+                                           ; SOURCE LINE # 48
+00D3         ?C0012:
+                                           ; SOURCE LINE # 50
+00D3 7B01              MOV     R3,#01H
+C51 COMPILER V9.60.0.0   CRC16_MODBUS                                                      05/06/2023 12:12:07 PAGE 9   
+
+00D5 7A00        R     MOV     R2,#HIGH wCRCin
+00D7 7900        R     MOV     R1,#LOW wCRCin
+00D9 C003              PUSH    AR3
+00DB C002              PUSH    AR2
+00DD C001              PUSH    AR1
+00DF 900000      R     MOV     DPTR,#?_InvertUint16?BYTE+03H
+00E2 EB                MOV     A,R3
+00E3 F0                MOVX    @DPTR,A
+00E4 A3                INC     DPTR
+00E5 EA                MOV     A,R2
+00E6 F0                MOVX    @DPTR,A
+00E7 A3                INC     DPTR
+00E8 E9                MOV     A,R1
+00E9 F0                MOVX    @DPTR,A
+00EA D001              POP     AR1
+00EC D002              POP     AR2
+00EE D003              POP     AR3
+00F0 120000      R     LCALL   _InvertUint16
+                                           ; SOURCE LINE # 51
+00F3 900000      R     MOV     DPTR,#wCRCin
+00F6 E0                MOVX    A,@DPTR
+00F7 FE                MOV     R6,A
+00F8 A3                INC     DPTR
+00F9 E0                MOVX    A,@DPTR
+00FA FF                MOV     R7,A
+                                           ; SOURCE LINE # 52
+00FB 22                RET     
+             ; FUNCTION _CRC16_MODBUS (END)
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    579    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      40
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

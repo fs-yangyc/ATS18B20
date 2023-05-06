@@ -1,0 +1,714 @@
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE CFGUO
+OBJECT MODULE PLACED IN .\Objects\cfguo.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE cfguo.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND CODE PRI
+                    -NT(.\Listings\cfguo.lst) TABS(2) OBJECT(.\Objects\cfguo.obj)
+
+line level    source
+
+   1          #include <cfguo.h>
+   2          #include <Crc16_MODBUS.h>
+   3          #include <DelayTime.h>
+   4          #include <DataTrans.h>
+   5          #include <string.h>
+   6          
+   7          #include <pc.h>
+   8          /**
+   9          *** 函数名称 ： RequireCFGuoAllChannelTemperature
+  10          *** 函数功能 ： 读取巡检仪所有通道的温度数据
+  11          *** 入口参数 ： 无
+  12          *** 返回值   ： 接收数据正确返回 1，错误返回 0
+  13          */
+  14          char RequireCFGuoAllChannelTemperature(float *fTempData)
+  15          {
+  16   1        char nUpdataCommand[10],nErrorCunt,nPassFail;
+  17   1        unsigned char nDataCunt,cCfguoXJYRxData[250];
+  18   1        int nData = 0,nTempDataCunt = 0;
+  19   1        unsigned int nCRCCode,nXJYCrcCode;
+  20   1      
+  21   1      RxDataStart:
+  22   1        
+  23   1        memset(nUpdataCommand,'\0',sizeof(nUpdataCommand));
+  24   1        memset(cCfguoXJYRxData,'\0',sizeof(cCfguoXJYRxData));
+  25   1        nDataCunt = 0;
+  26   1        nErrorCunt = 0;
+  27   1        
+  28   1        UsartInterrupt(ComPort_2,COMDIS);
+  29   1        SetUsartTwoPosionAndBtr(Com2_Other,CFG,BTR57600);
+  30   1        
+  31   1        Delay_MS(1);
+  32   1      
+  33   1        RS485RE = 0x00; // 设置MAX485接收使能
+  34   1        S2CON &= 0xfe;
+  35   1        while(1){
+  36   2          // 查询方式接收数据
+  37   2          if(S2CON & 0x01){ // 等待数据到
+  38   3            S2CON &= 0xfe;
+  39   3            if('<' == S2BUF){
+  40   4              nUpdataCommand[nDataCunt] = S2BUF;
+  41   4              nDataCunt++;
+  42   4              while(1){
+  43   5                if(S2CON & 0x01){ // 等待数据到
+  44   6                  S2CON &= 0xfe;
+  45   6                  nUpdataCommand[nDataCunt] = S2BUF;
+  46   6                  nDataCunt++;
+  47   6                  
+  48   6                  if(nDataCunt > 5)
+  49   6                  break;
+  50   6                  
+  51   6                  
+  52   6                }
+  53   5              }
+  54   4            }
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 2   
+
+  55   3            
+  56   3            if(strstr(nUpdataCommand,"<XJTH>") != NULL)
+  57   3            break;
+  58   3            
+  59   3            nDataCunt = 0;
+  60   3            memset(nUpdataCommand,'\0',sizeof(nUpdataCommand));
+  61   3          }
+  62   2        }
+  63   1        
+  64   1        RS485RE = 0x01;
+  65   1        Delay_MS(1);
+  66   1        
+  67   1        S2CON &= 0xfd;
+  68   1        S2BUF = 0x25;
+  69   1        while((S2CON & 0x02) != 0x02);  // S4TI == 1
+  70   1      
+  71   1        Delay_MS(1);
+  72   1        S2CON &= 0xfd;
+  73   1        S2BUF = 0x23;
+  74   1        while((S2CON & 0x02) != 0x02);  // S4TI == 1
+  75   1        S2CON &= 0xfd;;
+  76   1      
+  77   1        RS485RE = 0x00; // 设置MAX485接收使能
+  78   1        for(nDataCunt = 0; nDataCunt < 205; nDataCunt++){
+  79   2          while(1){
+  80   3      
+  81   3            if(S2CON & 0x01){ // 等待数据到
+  82   4              S2CON &= 0xfe;
+  83   4              cCfguoXJYRxData[nDataCunt] = S2BUF;
+  84   4              
+  85   4              break;
+  86   4            }
+  87   3          }
+  88   2        }
+  89   1         
+  90   1        nCRCCode = CRC16_MODBUS(cCfguoXJYRxData,203); // 巡检仪前203个数据的CRC校验码
+  91   1        nXJYCrcCode = cCfguoXJYRxData[204]; // CRC高位
+  92   1        nXJYCrcCode <<= 0x08;
+  93   1        nXJYCrcCode += cCfguoXJYRxData[203]; // CRC低位
+  94   1        
+  95   1        if(nCRCCode == nXJYCrcCode){ // 接收数据正确
+  96   2          nErrorCunt = 0x00; // 接收数据正确,清除错误记录
+  97   2          for(nDataCunt = 3; nDataCunt < 194; nDataCunt = nDataCunt + 6){
+  98   3            nData = cCfguoXJYRxData[nDataCunt] & 0x07;
+  99   3            nData = nData << 0x08;
+ 100   3            nData += cCfguoXJYRxData[nDataCunt + 1];
+ 101   3            fTempData[nTempDataCunt] = (float)nData + (float)(cCfguoXJYRxData[nDataCunt + 2]) / 100.0;
+ 102   3          
+ 103   3            if(cCfguoXJYRxData[nDataCunt] & 0x08){ // 负温度
+ 104   4              fTempData[nTempDataCunt] = -fTempData[nTempDataCunt];
+ 105   4            }
+ 106   3            nTempDataCunt++;
+ 107   3          }
+ 108   2          
+ 109   2          nPassFail = 0x01;
+ 110   2        }
+ 111   1        
+ 112   1        else{ // 接收数据不正确，重新接收
+ 113   2          nErrorCunt++;
+ 114   2          if(nErrorCunt > 10){
+ 115   3            nPassFail = 0x00;
+ 116   3          }
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 3   
+
+ 117   2            
+ 118   2          else
+ 119   2          goto RxDataStart;
+ 120   2        }
+ 121   1      
+ 122   1        RS485RE = 0x01; // 恢复MAX485发送使能
+ 123   1        return nPassFail;
+ 124   1      }
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 4   
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+             ; FUNCTION _RequireCFGuoAllChannelTemperature (BEGIN)
+                                           ; SOURCE LINE # 14
+0000 900000      R     MOV     DPTR,#fTempData
+0003 EB                MOV     A,R3
+0004 F0                MOVX    @DPTR,A
+0005 A3                INC     DPTR
+0006 EA                MOV     A,R2
+0007 F0                MOVX    @DPTR,A
+0008 A3                INC     DPTR
+0009 E9                MOV     A,R1
+000A F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 15
+                                           ; SOURCE LINE # 18
+000B E4                CLR     A
+000C 900000      R     MOV     DPTR,#nData
+000F F0                MOVX    @DPTR,A
+0010 A3                INC     DPTR
+0011 F0                MOVX    @DPTR,A
+0012 A3                INC     DPTR
+0013 F0                MOVX    @DPTR,A
+0014 A3                INC     DPTR
+0015 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 21
+0016         RxDataStart:
+                                           ; SOURCE LINE # 23
+0016 7E00              MOV     R6,#00H
+0018 7F0A              MOV     R7,#0AH
+001A 7D00              MOV     R5,#00H
+001C 7B01              MOV     R3,#01H
+001E 7A00        R     MOV     R2,#HIGH nUpdataCommand
+0020 7900        R     MOV     R1,#LOW nUpdataCommand
+0022 120000      E     LCALL   ?C?MEMSET
+                                           ; SOURCE LINE # 24
+0025 7E00              MOV     R6,#00H
+0027 7FFA              MOV     R7,#0FAH
+0029 7D00              MOV     R5,#00H
+002B 7B01              MOV     R3,#01H
+002D 7A00        R     MOV     R2,#HIGH cCfguoXJYRxData
+002F 7900        R     MOV     R1,#LOW cCfguoXJYRxData
+0031 120000      E     LCALL   ?C?MEMSET
+                                           ; SOURCE LINE # 25
+0034 E4                CLR     A
+0035 900000      R     MOV     DPTR,#nDataCunt
+0038 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 26
+0039 900000      R     MOV     DPTR,#nErrorCunt
+003C F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 28
+003D FD                MOV     R5,A
+003E 7F01              MOV     R7,#01H
+0040 120000      E     LCALL   _UsartInterrupt
+                                           ; SOURCE LINE # 29
+0043 7B06              MOV     R3,#06H
+0045 7D80              MOV     R5,#080H
+0047 7F01              MOV     R7,#01H
+0049 120000      E     LCALL   _SetUsartTwoPosionAndBtr
+                                           ; SOURCE LINE # 31
+004C 7F01              MOV     R7,#01H
+004E 7E00              MOV     R6,#00H
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 5   
+
+0050 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 33
+0053 C2A1              CLR     RS485RE
+                                           ; SOURCE LINE # 34
+0055 539AFE            ANL     S2CON,#0FEH
+0058         ?C0002:
+                                           ; SOURCE LINE # 35
+                                           ; SOURCE LINE # 37
+0058 E59A              MOV     A,S2CON
+005A 30E0FB            JNB     ACC.0,?C0002
+                                           ; SOURCE LINE # 38
+005D 539AFE            ANL     S2CON,#0FEH
+                                           ; SOURCE LINE # 39
+0060 E59B              MOV     A,S2BUF
+0062 643C              XRL     A,#03CH
+0064 7042              JNZ     ?C0005
+                                           ; SOURCE LINE # 40
+0066 900000      R     MOV     DPTR,#nDataCunt
+0069 E0                MOVX    A,@DPTR
+006A 2400        R     ADD     A,#LOW nUpdataCommand
+006C F582              MOV     DPL,A
+006E E4                CLR     A
+006F 3400        R     ADDC    A,#HIGH nUpdataCommand
+0071 F583              MOV     DPH,A
+0073 E59B              MOV     A,S2BUF
+0075 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 41
+0076 900000      R     MOV     DPTR,#nDataCunt
+0079 E0                MOVX    A,@DPTR
+007A 04                INC     A
+007B F0                MOVX    @DPTR,A
+007C         ?C0006:
+                                           ; SOURCE LINE # 42
+                                           ; SOURCE LINE # 43
+007C E59A              MOV     A,S2CON
+007E 30E0FB            JNB     ACC.0,?C0006
+                                           ; SOURCE LINE # 44
+0081 539AFE            ANL     S2CON,#0FEH
+                                           ; SOURCE LINE # 45
+0084 900000      R     MOV     DPTR,#nDataCunt
+0087 E0                MOVX    A,@DPTR
+0088 2400        R     ADD     A,#LOW nUpdataCommand
+008A F582              MOV     DPL,A
+008C E4                CLR     A
+008D 3400        R     ADDC    A,#HIGH nUpdataCommand
+008F F583              MOV     DPH,A
+0091 E59B              MOV     A,S2BUF
+0093 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 46
+0094 900000      R     MOV     DPTR,#nDataCunt
+0097 E0                MOVX    A,@DPTR
+0098 04                INC     A
+0099 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 48
+009A E0                MOVX    A,@DPTR
+009B D3                SETB    C
+009C 9405              SUBB    A,#05H
+009E 7480              MOV     A,#080H
+00A0 9480              SUBB    A,#080H
+00A2 40D8              JC      ?C0006
+                                           ; SOURCE LINE # 49
+00A4 8002              SJMP    ?C0005
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 6   
+
+                                           ; SOURCE LINE # 52
+                                           ; SOURCE LINE # 53
+00A6 80D4              SJMP    ?C0006
+                                           ; SOURCE LINE # 54
+00A8         ?C0005:
+                                           ; SOURCE LINE # 56
+00A8 7B01              MOV     R3,#01H
+00AA 7A00        R     MOV     R2,#HIGH nUpdataCommand
+00AC 7900        R     MOV     R1,#LOW nUpdataCommand
+00AE 900000      E     MOV     DPTR,#?_strstr?BYTE+03H
+00B1 74FF              MOV     A,#0FFH
+00B3 F0                MOVX    @DPTR,A
+00B4 A3                INC     DPTR
+00B5 7400        R     MOV     A,#HIGH ?SC_0
+00B7 F0                MOVX    @DPTR,A
+00B8 A3                INC     DPTR
+00B9 7400        R     MOV     A,#LOW ?SC_0
+00BB F0                MOVX    @DPTR,A
+00BC 120000      E     LCALL   _strstr
+00BF EB                MOV     A,R3
+00C0 8A83              MOV     DPH,R2
+00C2 8982              MOV     DPL,R1
+00C4 7B00              MOV     R3,#00H
+00C6 7A00              MOV     R2,#00H
+00C8 7900              MOV     R1,#00H
+00CA 7006              JNZ     ?C0030
+00CC E582              MOV     A,DPL
+00CE 7002              JNZ     ?C0030
+00D0 E583              MOV     A,DPH
+00D2         ?C0030:
+00D2 7014              JNZ     ?C0003
+                                           ; SOURCE LINE # 57
+                                           ; SOURCE LINE # 59
+00D4 900000      R     MOV     DPTR,#nDataCunt
+00D7 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 60
+00D8 FE                MOV     R6,A
+00D9 7F0A              MOV     R7,#0AH
+00DB FD                MOV     R5,A
+00DC 7B01              MOV     R3,#01H
+00DE 7A00        R     MOV     R2,#HIGH nUpdataCommand
+00E0 7900        R     MOV     R1,#LOW nUpdataCommand
+00E2 120000      E     LCALL   ?C?MEMSET
+                                           ; SOURCE LINE # 61
+                                           ; SOURCE LINE # 62
+00E5 020000      R     LJMP    ?C0002
+00E8         ?C0003:
+                                           ; SOURCE LINE # 64
+00E8 D2A1              SETB    RS485RE
+                                           ; SOURCE LINE # 65
+00EA 7F01              MOV     R7,#01H
+00EC 7E00              MOV     R6,#00H
+00EE 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 67
+00F1 539AFD            ANL     S2CON,#0FDH
+                                           ; SOURCE LINE # 68
+00F4 759B25            MOV     S2BUF,#025H
+00F7         ?C0011:
+                                           ; SOURCE LINE # 69
+00F7 E59A              MOV     A,S2CON
+00F9 5402              ANL     A,#02H
+00FB 6402              XRL     A,#02H
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 7   
+
+00FD 70F8              JNZ     ?C0011
+                                           ; SOURCE LINE # 71
+00FF 7F01              MOV     R7,#01H
+0101 FE                MOV     R6,A
+0102 120000      E     LCALL   _Delay_MS
+                                           ; SOURCE LINE # 72
+0105 539AFD            ANL     S2CON,#0FDH
+                                           ; SOURCE LINE # 73
+0108 759B23            MOV     S2BUF,#023H
+010B         ?C0013:
+                                           ; SOURCE LINE # 74
+010B E59A              MOV     A,S2CON
+010D 5402              ANL     A,#02H
+010F 6402              XRL     A,#02H
+0111 70F8              JNZ     ?C0013
+                                           ; SOURCE LINE # 75
+0113 539AFD            ANL     S2CON,#0FDH
+                                           ; SOURCE LINE # 77
+0116 C2A1              CLR     RS485RE
+                                           ; SOURCE LINE # 78
+0118 900000      R     MOV     DPTR,#nDataCunt
+011B F0                MOVX    @DPTR,A
+011C         ?C0015:
+011C 900000      R     MOV     DPTR,#nDataCunt
+011F E0                MOVX    A,@DPTR
+0120 C3                CLR     C
+0121 94CD              SUBB    A,#0CDH
+0123 7480              MOV     A,#080H
+0125 9480              SUBB    A,#080H
+0127 5020              JNC     ?C0016
+0129         ?C0018:
+                                           ; SOURCE LINE # 79
+                                           ; SOURCE LINE # 81
+0129 E59A              MOV     A,S2CON
+012B 30E0FB            JNB     ACC.0,?C0018
+                                           ; SOURCE LINE # 82
+012E 539AFE            ANL     S2CON,#0FEH
+                                           ; SOURCE LINE # 83
+0131 900000      R     MOV     DPTR,#nDataCunt
+0134 E0                MOVX    A,@DPTR
+0135 2400        R     ADD     A,#LOW cCfguoXJYRxData
+0137 F582              MOV     DPL,A
+0139 E4                CLR     A
+013A 3400        R     ADDC    A,#HIGH cCfguoXJYRxData
+013C F583              MOV     DPH,A
+013E E59B              MOV     A,S2BUF
+0140 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 85
+                                           ; SOURCE LINE # 86
+                                           ; SOURCE LINE # 87
+                                           ; SOURCE LINE # 88
+0141 900000      R     MOV     DPTR,#nDataCunt
+0144 E0                MOVX    A,@DPTR
+0145 04                INC     A
+0146 F0                MOVX    @DPTR,A
+0147 80D3              SJMP    ?C0015
+0149         ?C0016:
+                                           ; SOURCE LINE # 90
+0149 7B01              MOV     R3,#01H
+014B 7A00        R     MOV     R2,#HIGH cCfguoXJYRxData
+014D 7900        R     MOV     R1,#LOW cCfguoXJYRxData
+014F 7DCB              MOV     R5,#0CBH
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 8   
+
+0151 7C00              MOV     R4,#00H
+0153 120000      E     LCALL   _CRC16_MODBUS
+;---- Variable 'nCRCCode' assigned to Register 'R4/R5' ----
+0156 AD07              MOV     R5,AR7
+0158 AC06              MOV     R4,AR6
+                                           ; SOURCE LINE # 91
+015A 900000      R     MOV     DPTR,#cCfguoXJYRxData+0CCH
+015D E0                MOVX    A,@DPTR
+;---- Variable 'nXJYCrcCode' assigned to Register 'R2/R3' ----
+015E FB                MOV     R3,A
+015F 7A00              MOV     R2,#00H
+                                           ; SOURCE LINE # 92
+0161 7B00              MOV     R3,#00H
+0163 FA                MOV     R2,A
+                                           ; SOURCE LINE # 93
+0164 900000      R     MOV     DPTR,#cCfguoXJYRxData+0CBH
+0167 E0                MOVX    A,@DPTR
+0168 2B                ADD     A,R3
+0169 FB                MOV     R3,A
+016A E4                CLR     A
+016B 3A                ADDC    A,R2
+016C FA                MOV     R2,A
+                                           ; SOURCE LINE # 95
+016D FE                MOV     R6,A
+016E ED                MOV     A,R5
+016F 6B                XRL     A,R3
+0170 7002              JNZ     ?C0031
+0172 EC                MOV     A,R4
+0173 6E                XRL     A,R6
+0174         ?C0031:
+0174 6003              JZ      $ + 5H
+0176 020000      R     LJMP    ?C0021
+                                           ; SOURCE LINE # 96
+0179 900000      R     MOV     DPTR,#nErrorCunt
+017C F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 97
+017D 900000      R     MOV     DPTR,#nDataCunt
+0180 7403              MOV     A,#03H
+0182 F0                MOVX    @DPTR,A
+0183         ?C0022:
+0183 900000      R     MOV     DPTR,#nDataCunt
+0186 E0                MOVX    A,@DPTR
+0187 C3                CLR     C
+0188 94C2              SUBB    A,#0C2H
+018A 7480              MOV     A,#080H
+018C 9480              SUBB    A,#080H
+018E 4003              JC      $ + 5H
+0190 020000      R     LJMP    ?C0023
+                                           ; SOURCE LINE # 98
+0193 E0                MOVX    A,@DPTR
+0194 2400        R     ADD     A,#LOW cCfguoXJYRxData
+0196 F582              MOV     DPL,A
+0198 E4                CLR     A
+0199 3400        R     ADDC    A,#HIGH cCfguoXJYRxData
+019B F583              MOV     DPH,A
+019D E0                MOVX    A,@DPTR
+019E 5407              ANL     A,#07H
+01A0 FF                MOV     R7,A
+01A1 900000      R     MOV     DPTR,#nData
+01A4 E4                CLR     A
+01A5 F0                MOVX    @DPTR,A
+01A6 A3                INC     DPTR
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 9   
+
+01A7 EF                MOV     A,R7
+01A8 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 99
+01A9 E0                MOVX    A,@DPTR
+01AA F8                MOV     R0,A
+01AB E4                CLR     A
+01AC F0                MOVX    @DPTR,A
+01AD E8                MOV     A,R0
+01AE 900000      R     MOV     DPTR,#nData
+01B1 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 100
+01B2 900000      R     MOV     DPTR,#nDataCunt
+01B5 E0                MOVX    A,@DPTR
+01B6 2400        R     ADD     A,#LOW cCfguoXJYRxData+01H
+01B8 F582              MOV     DPL,A
+01BA E4                CLR     A
+01BB 3400        R     ADDC    A,#HIGH cCfguoXJYRxData+01H
+01BD F583              MOV     DPH,A
+01BF E0                MOVX    A,@DPTR
+01C0 FF                MOV     R7,A
+01C1 900000      R     MOV     DPTR,#nData+01H
+01C4 E0                MOVX    A,@DPTR
+01C5 2F                ADD     A,R7
+01C6 F0                MOVX    @DPTR,A
+01C7 900000      R     MOV     DPTR,#nData
+01CA E0                MOVX    A,@DPTR
+01CB 3400              ADDC    A,#00H
+01CD F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 101
+01CE 900000      R     MOV     DPTR,#nDataCunt
+01D1 E0                MOVX    A,@DPTR
+01D2 2400        R     ADD     A,#LOW cCfguoXJYRxData+02H
+01D4 F582              MOV     DPL,A
+01D6 E4                CLR     A
+01D7 3400        R     ADDC    A,#HIGH cCfguoXJYRxData+02H
+01D9 F583              MOV     DPH,A
+01DB E0                MOVX    A,@DPTR
+01DC FC                MOV     R4,A
+01DD E4                CLR     A
+01DE 120000      E     LCALL   ?C?FCASTC
+01E1 E4                CLR     A
+01E2 FB                MOV     R3,A
+01E3 FA                MOV     R2,A
+01E4 79C8              MOV     R1,#0C8H
+01E6 7842              MOV     R0,#042H
+01E8 120000      E     LCALL   ?C?FPDIV
+01EB C004              PUSH    AR4
+01ED C005              PUSH    AR5
+01EF C006              PUSH    AR6
+01F1 C007              PUSH    AR7
+01F3 900000      R     MOV     DPTR,#nData
+01F6 E0                MOVX    A,@DPTR
+01F7 FC                MOV     R4,A
+01F8 A3                INC     DPTR
+01F9 E0                MOVX    A,@DPTR
+01FA FD                MOV     R5,A
+01FB EC                MOV     A,R4
+01FC 120000      E     LCALL   ?C?FCASTI
+01FF D003              POP     AR3
+0201 D002              POP     AR2
+0203 D001              POP     AR1
+0205 D000              POP     AR0
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 10  
+
+0207 120000      E     LCALL   ?C?FPADD
+020A C004              PUSH    AR4
+020C C005              PUSH    AR5
+020E C006              PUSH    AR6
+0210 C007              PUSH    AR7
+0212 900000      R     MOV     DPTR,#nTempDataCunt
+0215 E0                MOVX    A,@DPTR
+0216 FE                MOV     R6,A
+0217 A3                INC     DPTR
+0218 E0                MOVX    A,@DPTR
+0219 7802              MOV     R0,#02H
+021B         ?C0032:
+021B C3                CLR     C
+021C 33                RLC     A
+021D CE                XCH     A,R6
+021E 33                RLC     A
+021F CE                XCH     A,R6
+0220 D8F9              DJNZ    R0,?C0032
+0222 FF                MOV     R7,A
+0223 900000      R     MOV     DPTR,#fTempData
+0226 E0                MOVX    A,@DPTR
+0227 FB                MOV     R3,A
+0228 A3                INC     DPTR
+0229 E0                MOVX    A,@DPTR
+022A FA                MOV     R2,A
+022B A3                INC     DPTR
+022C E0                MOVX    A,@DPTR
+022D F9                MOV     R1,A
+022E 8F82              MOV     DPL,R7
+0230 8E83              MOV     DPH,R6
+0232 D007              POP     AR7
+0234 D006              POP     AR6
+0236 D005              POP     AR5
+0238 D004              POP     AR4
+023A 120000      E     LCALL   ?C?LSTOPTR
+                                           ; SOURCE LINE # 103
+023D 900000      R     MOV     DPTR,#nDataCunt
+0240 E0                MOVX    A,@DPTR
+0241 2400        R     ADD     A,#LOW cCfguoXJYRxData
+0243 F582              MOV     DPL,A
+0245 E4                CLR     A
+0246 3400        R     ADDC    A,#HIGH cCfguoXJYRxData
+0248 F583              MOV     DPH,A
+024A E0                MOVX    A,@DPTR
+024B 30E359            JNB     ACC.3,?C0025
+                                           ; SOURCE LINE # 104
+024E 900000      R     MOV     DPTR,#nTempDataCunt
+0251 E0                MOVX    A,@DPTR
+0252 FE                MOV     R6,A
+0253 A3                INC     DPTR
+0254 E0                MOVX    A,@DPTR
+0255 7802              MOV     R0,#02H
+0257         ?C0033:
+0257 C3                CLR     C
+0258 33                RLC     A
+0259 CE                XCH     A,R6
+025A 33                RLC     A
+025B CE                XCH     A,R6
+025C D8F9              DJNZ    R0,?C0033
+025E FF                MOV     R7,A
+025F 900000      R     MOV     DPTR,#fTempData
+0262 E0                MOVX    A,@DPTR
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 11  
+
+0263 FB                MOV     R3,A
+0264 A3                INC     DPTR
+0265 E0                MOVX    A,@DPTR
+0266 FA                MOV     R2,A
+0267 A3                INC     DPTR
+0268 E0                MOVX    A,@DPTR
+0269 F9                MOV     R1,A
+026A 8F82              MOV     DPL,R7
+026C 8E83              MOV     DPH,R6
+026E 120000      E     LCALL   ?C?LLDOPTR
+0271 120000      E     LCALL   ?C?FPNEG
+0274 C004              PUSH    AR4
+0276 C005              PUSH    AR5
+0278 C006              PUSH    AR6
+027A C007              PUSH    AR7
+027C 900000      R     MOV     DPTR,#nTempDataCunt
+027F E0                MOVX    A,@DPTR
+0280 FE                MOV     R6,A
+0281 A3                INC     DPTR
+0282 E0                MOVX    A,@DPTR
+0283 7802              MOV     R0,#02H
+0285         ?C0034:
+0285 C3                CLR     C
+0286 33                RLC     A
+0287 CE                XCH     A,R6
+0288 33                RLC     A
+0289 CE                XCH     A,R6
+028A D8F9              DJNZ    R0,?C0034
+028C FF                MOV     R7,A
+028D 900000      R     MOV     DPTR,#fTempData
+0290 E0                MOVX    A,@DPTR
+0291 FB                MOV     R3,A
+0292 A3                INC     DPTR
+0293 E0                MOVX    A,@DPTR
+0294 FA                MOV     R2,A
+0295 A3                INC     DPTR
+0296 E0                MOVX    A,@DPTR
+0297 F9                MOV     R1,A
+0298 8F82              MOV     DPL,R7
+029A 8E83              MOV     DPH,R6
+029C D007              POP     AR7
+029E D006              POP     AR6
+02A0 D005              POP     AR5
+02A2 D004              POP     AR4
+02A4 120000      E     LCALL   ?C?LSTOPTR
+                                           ; SOURCE LINE # 105
+02A7         ?C0025:
+                                           ; SOURCE LINE # 106
+02A7 900000      R     MOV     DPTR,#nTempDataCunt+01H
+02AA E0                MOVX    A,@DPTR
+02AB 04                INC     A
+02AC F0                MOVX    @DPTR,A
+02AD 7006              JNZ     ?C0035
+02AF 900000      R     MOV     DPTR,#nTempDataCunt
+02B2 E0                MOVX    A,@DPTR
+02B3 04                INC     A
+02B4 F0                MOVX    @DPTR,A
+02B5         ?C0035:
+                                           ; SOURCE LINE # 107
+02B5 900000      R     MOV     DPTR,#nDataCunt
+02B8 E0                MOVX    A,@DPTR
+02B9 2406              ADD     A,#06H
+C51 COMPILER V9.60.0.0   CFGUO                                                             05/06/2023 12:12:07 PAGE 12  
+
+02BB F0                MOVX    @DPTR,A
+02BC 020000      R     LJMP    ?C0022
+02BF         ?C0023:
+                                           ; SOURCE LINE # 109
+02BF 900000      R     MOV     DPTR,#nPassFail
+02C2 7401              MOV     A,#01H
+02C4 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 110
+02C5 801D              SJMP    ?C0026
+02C7         ?C0021:
+                                           ; SOURCE LINE # 112
+                                           ; SOURCE LINE # 113
+02C7 900000      R     MOV     DPTR,#nErrorCunt
+02CA E0                MOVX    A,@DPTR
+02CB 04                INC     A
+02CC F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 114
+02CD E0                MOVX    A,@DPTR
+02CE FF                MOV     R7,A
+02CF 33                RLC     A
+02D0 95E0              SUBB    A,ACC
+02D2 FE                MOV     R6,A
+02D3 D3                SETB    C
+02D4 EF                MOV     A,R7
+02D5 940A              SUBB    A,#0AH
+02D7 EE                MOV     A,R6
+02D8 6480              XRL     A,#080H
+02DA 9480              SUBB    A,#080H
+02DC 5003              JNC     $ + 5H
+02DE 020000      R     LJMP    RxDataStart
+                                           ; SOURCE LINE # 115
+02E1 E4                CLR     A
+02E2 A3                INC     DPTR
+02E3 F0                MOVX    @DPTR,A
+                                           ; SOURCE LINE # 116
+                                           ; SOURCE LINE # 119
+                                           ; SOURCE LINE # 120
+02E4         ?C0026:
+                                           ; SOURCE LINE # 122
+02E4 D2A1              SETB    RS485RE
+                                           ; SOURCE LINE # 123
+02E6 900000      R     MOV     DPTR,#nPassFail
+02E9 E0                MOVX    A,@DPTR
+02EA FF                MOV     R7,A
+                                           ; SOURCE LINE # 124
+02EB 22                RET     
+             ; FUNCTION _RequireCFGuoAllChannelTemperature (END)
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    748    ----
+   CONSTANT SIZE    =      7    ----
+   XDATA SIZE       =   ----     270
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

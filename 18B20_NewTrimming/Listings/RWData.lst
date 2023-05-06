@@ -1,0 +1,948 @@
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE RWDATA
+OBJECT MODULE PLACED IN .\Objects\RWData.obj
+COMPILER INVOKED BY: D:\Software\Keil\C51\BIN\C51.EXE RWData.c LARGE OPTIMIZE(4,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.
+                    -\Listings\RWData.lst) TABS(2) OBJECT(.\Objects\RWData.obj)
+
+line level    source
+
+   1          #include <RWData.h>
+   2          #include <DelayTime.h>
+   3          
+   4          char code nICLogicPositionToBoardPosition[48] = { // 芯片在载片板上的实际位置位置，该数�
+             -�的下标代表逻辑位置
+   5            26,32,25,22,16,21,15,20,    // P0
+   6            14,10,4,3,1,0,              // P1
+   7            39,38,37,43,36,42,27,33,    // P2
+   8            19,41,44,17,6,              // P4
+   9            35,11,5,18,12,              // P5
+  10            9,2,8,7,13,28,29,34,        // P6
+  11            47,40,46,45,31,24,30,23     // P7
+  12          };
+  13          
+  14          char code nICBoardPositionToLogicPosition[48] = { // 芯片在在测试程序中的逻辑位置，该数�
+             -�的下标代表芯片在载片板上的实际位置位置
+  15            13,12,33,11,10,29,26,35,
+  16            34,32, 9,28,31,36,8 , 6,
+  17            4 ,25,30,22, 7, 5, 3,47,
+  18            45, 2, 0,20,37,38,46,44,
+  19            1 ,21,39,27,18,16,15,14,
+  20            41,23,19,17,24,43,42,40
+  21          };
+  22          
+  23          int xdata n18B20BitPwr[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400
+             -,0x0800,0x1000,0x2000,0x4000,0x8000};
+  24          unsigned char idata nPortData[16][7]; // 该变量的每一个 bit 代表一颗芯片，总共 48 颗芯�
+             -�
+  25          unsigned char nOnePortChipNumber[7] = {0x08,0x06,0x08,0x05,0x05,0x08,0x08}; // 单片机每一个端口上
+             -面挂载的芯片数量
+  26          unsigned char idata nP0Data,nP1Data,nP2Data,nP4Data,nP5Data,nP6Data,nP7Data;
+  27          char nPositionCunt;
+  28          int nTargetPosition[48];
+  29          
+  30          void ChangeLogicPositionToPhysicalPosition(int *nLogicPosition,int *nPhysicalPosition)
+  31          {
+  32   1        for(nPositionCunt = 0; nPositionCunt < 48; nPositionCunt++){
+  33   2          nPhysicalPosition[nICLogicPositionToBoardPosition[nPositionCunt]] = nLogicPosition[nPositionCunt];
+  34   2        }
+  35   1      }
+  36          
+  37          void ChangePhysicalToLogicPositionPosition(int *PhysicalPosition,int *nLogicPosition)
+  38          {
+  39   1        for(nPositionCunt = 0; nPositionCunt < 48; nPositionCunt++){
+  40   2          nLogicPosition[nICBoardPositionToLogicPosition[nPositionCunt]] = PhysicalPosition[nPositionCunt];
+  41   2        }
+  42   1      }
+  43          
+  44          void SetDqStatus(char nHighLow)
+  45          {
+  46   1        if(nHighLow == HIGH){
+  47   2          P0 =  0xff;
+  48   2          P1 |= 0x3f;
+  49   2          P2 =  0xff;
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 2   
+
+  50   2          P4 |= 0x1f;
+  51   2          P5 |= 0x3e;
+  52   2          P6 =  0xff;
+  53   2          P7 =  0xff;
+  54   2        }
+  55   1        
+  56   1        else{
+  57   2          P0 =  0x00; 
+  58   2          P1 &= 0xc0;
+  59   2          P2 =  0x00;
+  60   2          P4 &= 0xe0;
+  61   2          P5 &= 0xc1;
+  62   2          P6 =  0x00;
+  63   2          P7 =  0x00;
+  64   2        }
+  65   1      }
+  66          
+  67          void ResetTC18B20(void)
+  68          {
+  69   1        OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+  70   1        P3 |= 0xc0;     // DIR0 = DIR1 = 0x01，MCU -> DQ
+  71   1        Delay_600US();
+  72   1        
+  73   1        SetDqStatus(LOW);   // MCU Reset 18B20
+  74   1        OE = 0x00;          // 所有的DQ = 0x00
+  75   1        Delay_600US();
+  76   1        
+  77   1        OE = 0x01;      // 关闭245输出使能，DQ因上拉而置位为“1”
+  78   1        Delay_600US();    // 等待18B20应答
+  79   1      }
+  80          
+  81          void StartTC18B20Convert(void)
+  82          {
+  83   1        unsigned char nCommand,nBitCunt;
+  84   1        
+  85   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+  86   1        nCommand = SkipRomCommand;
+  87   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+  88   2          SetDqStatus(LOW);
+  89   2          OE = 0x00;          // DQ = 0x00
+  90   2          Delay_5US();
+  91   2          
+  92   2          if(nCommand & 0x01) { 
+  93   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+  94   3          }
+  95   2          
+  96   2          Delay_60US();
+  97   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+  98   2          nCommand = nCommand >> 0x01;
+  99   2        }
+ 100   1        
+ 101   1        Delay_600US();
+ 102   1        nCommand = ConverTemperature;
+ 103   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 104   2          SetDqStatus(LOW);
+ 105   2          OE = 0x00;          // DQ = 0x00
+ 106   2          Delay_5US();
+ 107   2          
+ 108   2          if(nCommand & 0x01) { 
+ 109   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 110   3          }
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 3   
+
+ 111   2          
+ 112   2          Delay_60US();
+ 113   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 114   2          nCommand = nCommand >> 0x01;
+ 115   2        }
+ 116   1      }
+ 117          
+ 118          void WriteDataToTC18B20_TH_TL_Conf(unsigned char nWriteE2PromOrScratchpad,unsigned char nTh,unsigned char 
+             -nTl,unsigned char nConf)
+ 119          {
+ 120   1        unsigned char nCommand,nBitCunt;
+ 121   1        
+ 122   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 123   1        nCommand = SkipRomCommand;
+ 124   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 125   2          SetDqStatus(LOW);
+ 126   2          OE = 0x00;          // DQ = 0x00
+ 127   2          Delay_5US();
+ 128   2          
+ 129   2          if(nCommand & 0x01) { 
+ 130   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 131   3          }
+ 132   2          
+ 133   2          Delay_60US();
+ 134   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 135   2          nCommand = nCommand >> 0x01;
+ 136   2        }
+ 137   1        
+ 138   1        Delay_600US();
+ 139   1        nCommand = WriteScratchpad;
+ 140   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 141   2          SetDqStatus(LOW);
+ 142   2          OE = 0x00;          // DQ = 0x00
+ 143   2          Delay_5US();
+ 144   2          
+ 145   2          if(nCommand & 0x01) { 
+ 146   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 147   3          }
+ 148   2          
+ 149   2          Delay_60US();
+ 150   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 151   2          nCommand = nCommand >> 0x01;
+ 152   2        }
+ 153   1        
+ 154   1        Delay_600US();
+ 155   1        nCommand = nTh;
+ 156   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 157   2          SetDqStatus(LOW);
+ 158   2          OE = 0x00;          // DQ = 0x00
+ 159   2          Delay_5US();
+ 160   2          
+ 161   2          if(nCommand & 0x01) { 
+ 162   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 163   3          }
+ 164   2          
+ 165   2          Delay_60US();
+ 166   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 167   2          nCommand = nCommand >> 0x01;
+ 168   2        }
+ 169   1        
+ 170   1        Delay_600US();
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 4   
+
+ 171   1        nCommand = nTl;
+ 172   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 173   2          SetDqStatus(LOW);
+ 174   2          OE = 0x00;          // DQ = 0x00
+ 175   2          Delay_5US();
+ 176   2          
+ 177   2          if(nCommand & 0x01) { 
+ 178   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 179   3          }
+ 180   2          
+ 181   2          Delay_60US();
+ 182   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 183   2          nCommand = nCommand >> 0x01;
+ 184   2        }
+ 185   1        
+ 186   1        Delay_600US();
+ 187   1        nCommand = nConf;
+ 188   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 189   2          SetDqStatus(LOW);
+ 190   2          OE = 0x00;          // DQ = 0x00
+ 191   2          Delay_5US();
+ 192   2          
+ 193   2          if(nCommand & 0x01) { 
+ 194   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 195   3          }
+ 196   2          
+ 197   2          Delay_60US();
+ 198   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 199   2          nCommand = nCommand >> 0x01;
+ 200   2        }
+ 201   1        
+ 202   1        if(WRITE_E2PROM == nWriteE2PromOrScratchpad){ // 写E2PROM
+ 203   2          ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 =
+             - 0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 204   2          nCommand = SkipRomCommand;
+ 205   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 206   3            SetDqStatus(LOW);
+ 207   3            OE = 0x00;          // DQ = 0x00
+ 208   3            Delay_5US();
+ 209   3          
+ 210   3            if(nCommand & 0x01) { 
+ 211   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 212   4            }
+ 213   3          
+ 214   3            Delay_60US();
+ 215   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 216   3            nCommand = nCommand >> 0x01;
+ 217   3          }
+ 218   2          
+ 219   2          Delay_600US();
+ 220   2          nCommand = CopyScratchpad; // 将暂存寄存器中的内容拷贝到E2PROM中
+ 221   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 222   3            SetDqStatus(LOW);
+ 223   3            OE = 0x00;          // DQ = 0x00
+ 224   3            Delay_5US();
+ 225   3          
+ 226   3            if(nCommand & 0x01) { 
+ 227   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 228   4            }
+ 229   3          
+ 230   3            Delay_60US();
+ 231   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 5   
+
+ 232   3            nCommand = nCommand >> 0x01;
+ 233   3          }
+ 234   2          
+ 235   2          Delay_MS(100);
+ 236   2        }
+ 237   1      }
+ 238          
+ 239          void ReadTemperatureDataFromTC18B20(int *pTemperatureData)
+ 240          {
+ 241   1        unsigned char nCommand,nBitCunt,nPortDataCunt,nCunt,nChips;
+ 242   1        
+ 243   1        for(nCunt = 0; nCunt < 48; nCunt++){
+ 244   2          pTemperatureData[nCunt] = 0x0000;
+ 245   2        }
+ 246   1        
+ 247   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 248   1        nCommand = SkipRomCommand;
+ 249   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 250   2          SetDqStatus(LOW);
+ 251   2          OE = 0x00;          // DQ = 0x00
+ 252   2          Delay_5US();
+ 253   2          
+ 254   2          if(nCommand & 0x01) { 
+ 255   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 256   3          }
+ 257   2          
+ 258   2          Delay_60US();
+ 259   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 260   2          nCommand = nCommand >> 0x01;
+ 261   2        }
+ 262   1        
+ 263   1        Delay_600US();
+ 264   1        nCommand = ReadScratchpad;
+ 265   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 266   2          SetDqStatus(LOW);
+ 267   2          OE = 0x00;          // DQ = 0x00
+ 268   2          Delay_5US();
+ 269   2          
+ 270   2          if(nCommand & 0x01) { 
+ 271   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 272   3          }
+ 273   2          
+ 274   2          Delay_60US();
+ 275   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 276   2          nCommand = nCommand >> 0x01;
+ 277   2        }
+ 278   1        
+ 279   1        for(nBitCunt = 0; nBitCunt < 16; nBitCunt++){
+ 280   2          P3 |= 0xc0;     // DIR0 = DIR1 = 0x01，MCU -> DQ
+ 281   2          SetDqStatus(LOW);   // SLOT 开始
+ 282   2          OE = 0x00;        // DQ = 0x00
+ 283   2          Delay_5US();
+ 284   2          
+ 285   2          OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01，SLOT 结束
+ 286   2          SetDqStatus(HIGH);  // 复位MCU端口，准备接收1bit数据
+ 287   2          P3 &= 0x3f;     // DIR0 = DIR1 = 0x00，DQ -> MCU
+ 288   2          OE = 0x00;     
+ 289   2          Delay_5US();
+ 290   2          
+ 291   2          nP0Data = P0;
+ 292   2          nP1Data = P1;
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 6   
+
+ 293   2          nP2Data = P2;
+ 294   2          nP4Data = P4;
+ 295   2          nP5Data = P5 & 0x3e;
+ 296   2          nP6Data = P6;
+ 297   2          nP7Data = P7;
+ 298   2          
+ 299   2          nPortData[nBitCunt][0] = nP0Data; 
+ 300   2          nPortData[nBitCunt][1] = nP1Data; 
+ 301   2          nPortData[nBitCunt][2] = nP2Data; 
+ 302   2          nPortData[nBitCunt][3] = nP4Data; 
+ 303   2          nPortData[nBitCunt][4] = nP5Data >> 0x01; 
+ 304   2          nPortData[nBitCunt][5] = nP6Data; 
+ 305   2          nPortData[nBitCunt][6] = nP7Data; 
+ 306   2          
+ 307   2          Delay_60US(); // 等待DQ自己复位
+ 308   2        }
+ 309   1        
+ 310   1        for(nBitCunt = 0; nBitCunt < 16; nBitCunt++){ // 接收芯片发出来的数据
+ 311   2          nPortDataCunt = 0x00;
+ 312   2          for(nCunt = 0; nCunt < 7; nCunt++){ // 7个端口
+ 313   3            for(nChips = 0; nChips < nOnePortChipNumber[nCunt]; nChips++){ // 每个端口颗芯片的颗数
+ 314   4              if(nPortData[nBitCunt][nCunt] & n18B20BitPwr[nChips]){
+ 315   5                pTemperatureData[nPortDataCunt] = pTemperatureData[nPortDataCunt] + n18B20BitPwr[nBitCunt];
+ 316   5              }
+ 317   4              nPortDataCunt++;
+ 318   4            }
+ 319   3          }
+ 320   2        }
+ 321   1      }
+ 322          
+ 323          void WriteSameDataToTC18B20_AdjRom(unsigned char nWriteE2PromOrScratchpad,unsigned char nAdj1Data,unsigned
+             - char nAdj2Data)
+ 324          {
+ 325   1        unsigned char nCommand,nBitCunt;
+ 326   1        
+ 327   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 328   1        nCommand = SkipRomCommand;
+ 329   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 330   2          SetDqStatus(LOW);
+ 331   2          OE = 0x00;          // DQ = 0x00
+ 332   2          Delay_5US();
+ 333   2          
+ 334   2          if(nCommand & 0x01) { 
+ 335   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 336   3          }
+ 337   2          
+ 338   2          Delay_60US();
+ 339   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 340   2          nCommand = nCommand >> 0x01;
+ 341   2        }
+ 342   1        
+ 343   1        Delay_600US();
+ 344   1        nCommand = OpenDoor;
+ 345   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 346   2          SetDqStatus(LOW);
+ 347   2          OE = 0x00;          // DQ = 0x00
+ 348   2          Delay_5US();
+ 349   2          
+ 350   2          if(nCommand & 0x01) { 
+ 351   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 352   3          }
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 7   
+
+ 353   2          
+ 354   2          Delay_60US();
+ 355   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 356   2          nCommand = nCommand >> 0x01;
+ 357   2        }
+ 358   1      
+ 359   1        Delay_600US();
+ 360   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 361   1        nCommand = SkipRomCommand;
+ 362   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 363   2          SetDqStatus(LOW);
+ 364   2          OE = 0x00;          // DQ = 0x00
+ 365   2          Delay_5US();
+ 366   2          
+ 367   2          if(nCommand & 0x01) { 
+ 368   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 369   3          }
+ 370   2          
+ 371   2          Delay_60US();
+ 372   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 373   2          nCommand = nCommand >> 0x01;
+ 374   2        }
+ 375   1        
+ 376   1        Delay_600US();
+ 377   1        nCommand = WriteAdj1;
+ 378   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 379   2          SetDqStatus(LOW);
+ 380   2          OE = 0x00;          // DQ = 0x00
+ 381   2          Delay_5US();
+ 382   2          
+ 383   2          if(nCommand & 0x01) { 
+ 384   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 385   3          }
+ 386   2          
+ 387   2          Delay_60US();
+ 388   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 389   2          nCommand = nCommand >> 0x01;
+ 390   2        }
+ 391   1      
+ 392   1        Delay_600US();
+ 393   1        nCommand = nAdj1Data;
+ 394   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 395   2          SetDqStatus(LOW);
+ 396   2          OE = 0x00;          // DQ = 0x00
+ 397   2          Delay_5US();
+ 398   2          
+ 399   2          if(nCommand & 0x01) { 
+ 400   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 401   3          }
+ 402   2          
+ 403   2          Delay_60US();
+ 404   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 405   2          nCommand = nCommand >> 0x01;
+ 406   2        }
+ 407   1      
+ 408   1        Delay_600US();
+ 409   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 410   1        nCommand = SkipRomCommand;
+ 411   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 412   2          SetDqStatus(LOW);
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 8   
+
+ 413   2          OE = 0x00;          // DQ = 0x00
+ 414   2          Delay_5US();
+ 415   2          
+ 416   2          if(nCommand & 0x01) { 
+ 417   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 418   3          }
+ 419   2          
+ 420   2          Delay_60US();
+ 421   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 422   2          nCommand = nCommand >> 0x01;
+ 423   2        }
+ 424   1        
+ 425   1        Delay_600US();
+ 426   1        nCommand = WriteAdj2;
+ 427   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 428   2          SetDqStatus(LOW);
+ 429   2          OE = 0x00;          // DQ = 0x00
+ 430   2          Delay_5US();
+ 431   2          
+ 432   2          if(nCommand & 0x01) { 
+ 433   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 434   3          }
+ 435   2          
+ 436   2          Delay_60US();
+ 437   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 438   2          nCommand = nCommand >> 0x01;
+ 439   2        }
+ 440   1      
+ 441   1        Delay_600US();
+ 442   1        nCommand = nAdj2Data;
+ 443   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 444   2          SetDqStatus(LOW);
+ 445   2          OE = 0x00;          // DQ = 0x00
+ 446   2          Delay_5US();
+ 447   2          
+ 448   2          if(nCommand & 0x01) { 
+ 449   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 450   3          }
+ 451   2          
+ 452   2          Delay_60US();
+ 453   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 454   2          nCommand = nCommand >> 0x01;
+ 455   2        } 
+ 456   1        
+ 457   1        if(WRITE_E2PROM == nWriteE2PromOrScratchpad){ // 写ADJ1/2 E2PROM
+ 458   2          Delay_600US();
+ 459   2          ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 =
+             - 0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 460   2          nCommand = SkipRomCommand;
+ 461   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 462   3            SetDqStatus(LOW);
+ 463   3            OE = 0x00;          // DQ = 0x00
+ 464   3            Delay_5US();
+ 465   3          
+ 466   3            if(nCommand & 0x01) { 
+ 467   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 468   4            }
+ 469   3          
+ 470   3            Delay_60US();
+ 471   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 472   3            nCommand = nCommand >> 0x01;
+ 473   3          }
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 9   
+
+ 474   2          
+ 475   2          Delay_600US();
+ 476   2          nCommand = CopyAdj1_Adj2ToE2Prom;
+ 477   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 478   3            SetDqStatus(LOW);
+ 479   3            OE = 0x00;          // DQ = 0x00
+ 480   3            Delay_5US();
+ 481   3          
+ 482   3            if(nCommand & 0x01) { 
+ 483   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 484   4            }
+ 485   3          
+ 486   3            Delay_60US();
+ 487   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 488   3            nCommand = nCommand >> 0x01;
+ 489   3          }
+ 490   2        }
+ 491   1      }
+ 492          
+ 493          void WriteDifferenceDataToTC18B20_AdjRom(unsigned char nWriteE2PromOrScratchpad,unsigned char nAdj1OrAdj2,
+             -unsigned char *nAdjData)
+ 494          {
+ 495   1        unsigned char nCommand,nPortDataCunt = 0x00;
+ 496   1        unsigned char nBitCunt,nMcuPortCunt,nCunt2;
+ 497   1        unsigned char nS1ToS48Data[8][7]; // 使用7个端口写数据
+ 498   1        unsigned char n1821BitPwr[8] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
+ 499   1        
+ 500   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 501   2          for(nMcuPortCunt = 0; nMcuPortCunt < 7; nMcuPortCunt++){
+ 502   3            nS1ToS48Data[nBitCunt][nMcuPortCunt] = 0x00;
+ 503   3          }
+ 504   2        }
+ 505   1          
+ 506   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){ // 8 bits 数据
+ 507   2          nPortDataCunt = 0x00;
+ 508   2          for(nMcuPortCunt = 0; nMcuPortCunt < 7; nMcuPortCunt++){ // 7个端口
+ 509   3            for(nCunt2 = 0; nCunt2 < nOnePortChipNumber[nMcuPortCunt]; nCunt2++){ // 每个端口颗芯片的颗数
+ 510   4              if(nAdjData[nPortDataCunt] & n1821BitPwr[nBitCunt]){
+ 511   5                nS1ToS48Data[nBitCunt][nMcuPortCunt] = nS1ToS48Data[nBitCunt][nMcuPortCunt] + n1821BitPwr[nCunt2]; //
+             - 把48颗芯片的数据的同一个位置的bit(共48bits)存放在7个8bits的寄存器中(nS1ToS48Data[0~47][0~6])
+ 512   5              }
+ 513   4              nPortDataCunt++;
+ 514   4            }
+ 515   3          }
+ 516   2        } // 为了写数据时序的严谨，先将所有要写的数据按照发送时序的要求处理好
+ 517   1        
+ 518   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 519   1        nCommand = SkipRomCommand;
+ 520   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 521   2          SetDqStatus(LOW);
+ 522   2          OE = 0x00;          // DQ = 0x00
+ 523   2          Delay_5US();
+ 524   2          
+ 525   2          if(nCommand & 0x01) { 
+ 526   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 527   3          }
+ 528   2          
+ 529   2          Delay_60US();
+ 530   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 531   2          nCommand = nCommand >> 0x01;
+ 532   2        }
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 10  
+
+ 533   1        
+ 534   1        Delay_600US();
+ 535   1        nCommand = OpenDoor;
+ 536   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 537   2          SetDqStatus(LOW);
+ 538   2          OE = 0x00;          // DQ = 0x00
+ 539   2          Delay_5US();
+ 540   2          
+ 541   2          if(nCommand & 0x01) { 
+ 542   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 543   3          }
+ 544   2          
+ 545   2          Delay_60US();
+ 546   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 547   2          nCommand = nCommand >> 0x01;
+ 548   2        }
+ 549   1      
+ 550   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 551   1        nCommand = SkipRomCommand;
+ 552   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 553   2          SetDqStatus(LOW);
+ 554   2          OE = 0x00;          // DQ = 0x00
+ 555   2          Delay_5US();
+ 556   2          
+ 557   2          if(nCommand & 0x01) { 
+ 558   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 559   3          }
+ 560   2          
+ 561   2          Delay_60US();
+ 562   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 563   2          nCommand = nCommand >> 0x01;
+ 564   2        }
+ 565   1        
+ 566   1        Delay_600US();
+ 567   1        nCommand = nAdj1OrAdj2;
+ 568   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 569   2          SetDqStatus(LOW);
+ 570   2          OE = 0x00;          // DQ = 0x00
+ 571   2          Delay_5US();
+ 572   2          
+ 573   2          if(nCommand & 0x01) { 
+ 574   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 575   3          }
+ 576   2          
+ 577   2          Delay_60US();
+ 578   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 579   2          nCommand = nCommand >> 0x01;
+ 580   2        }
+ 581   1        
+ 582   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 583   2          nP0Data = nS1ToS48Data[nBitCunt][0];
+ 584   2          nP2Data = nS1ToS48Data[nBitCunt][2];
+ 585   2          nP6Data = nS1ToS48Data[nBitCunt][5];
+ 586   2          nP7Data = nS1ToS48Data[nBitCunt][6];
+ 587   2          
+ 588   2          nS1ToS48Data[nBitCunt][4] <<= 0x01; // P51~P55
+ 589   2          nS1ToS48Data[nBitCunt][4] &= 0xfe;  // P50 = OE
+ 590   2          
+ 591   2          SetDqStatus(LOW);
+ 592   2          OE = 0x00;     // DQ = 0x00
+ 593   2          
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 11  
+
+ 594   2          nP1Data = 0xc0 & P1 | nS1ToS48Data[nBitCunt][1];  // 读取 P1 的高两位
+ 595   2          nP4Data = 0xe0 & P4 | nS1ToS48Data[nBitCunt][3];  // 读取 P4 的高三位
+ 596   2          nP5Data = 0xc1 & P5 | nS1ToS48Data[nBitCunt][4];  // 读取 P5 的高两位
+ 597   2          
+ 598   2          P0 = nP0Data; // DQ = 芯片号   1-8  databit
+ 599   2          P1 = nP1Data;   // DQ = 芯片号   9-14 databit
+ 600   2          P2 = nP2Data;   // DQ = 芯片号  15-22 databit
+ 601   2          P4 = nP4Data;   // DQ = 芯片号   23-27 databit
+ 602   2          P5 = nP5Data;   // DQ = 芯片号   28-32 databit
+ 603   2          P6 = nP6Data;   // DQ = 芯片号  33-40 databit
+ 604   2          P7 = nP7Data;   // DQ = 芯片号  41-48 databit
+ 605   2          
+ 606   2          Delay_60US();
+ 607   2          OE = 0x01; // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 608   2        }
+ 609   1        
+ 610   1        if(WRITE_E2PROM == nWriteE2PromOrScratchpad){ // 写E2PROM
+ 611   2          ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 =
+             - 0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 612   2          nCommand = SkipRomCommand;
+ 613   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 614   3            SetDqStatus(LOW);
+ 615   3            OE = 0x00;          // DQ = 0x00
+ 616   3            Delay_5US();
+ 617   3          
+ 618   3            if(nCommand & 0x01) { 
+ 619   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 620   4            }
+ 621   3          
+ 622   3            Delay_60US();
+ 623   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 624   3            nCommand = nCommand >> 0x01;
+ 625   3          }
+ 626   2          
+ 627   2          Delay_600US();
+ 628   2          nCommand = CopyAdj1_Adj2ToE2Prom;
+ 629   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 630   3            SetDqStatus(LOW);
+ 631   3            OE = 0x00;          // DQ = 0x00
+ 632   3            Delay_5US();
+ 633   3          
+ 634   3            if(nCommand & 0x01) { 
+ 635   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 636   4            }
+ 637   3          
+ 638   3            Delay_60US();
+ 639   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 640   3            nCommand = nCommand >> 0x01;
+ 641   3          }
+ 642   2        }
+ 643   1      }
+ 644          
+ 645          void ReadAdjRomFromTC18B20(unsigned char nRead2PromOrScratchpad,unsigned char *nAdj1Data,unsigned char *nA
+             -dj2Data)
+ 646          {
+ 647   1        unsigned char nCommand,nBitCunt,nPortDataCunt,nCunt,nChips;
+ 648   1        
+ 649   1        for(nCunt = 0; nCunt < 48; nCunt++){
+ 650   2          nAdj1Data[nCunt] = 0x00;
+ 651   2          nAdj2Data[nCunt] = 0x00;
+ 652   2        }
+ 653   1        
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 12  
+
+ 654   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 655   1        if(READ_E2PROM == nRead2PromOrScratchpad){
+ 656   2          nCommand = SkipRomCommand;
+ 657   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 658   3            SetDqStatus(LOW);
+ 659   3            OE = 0x00;          // DQ = 0x00
+ 660   3            Delay_5US();
+ 661   3          
+ 662   3            if(nCommand & 0x01) { 
+ 663   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 664   4            }
+ 665   3          
+ 666   3            Delay_60US();
+ 667   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 668   3            nCommand = nCommand >> 0x01;
+ 669   3          }
+ 670   2          
+ 671   2          Delay_600US();
+ 672   2          nCommand = RecallE2PROM; // 将E2PROM中的内容拷贝到暂存寄存器
+ 673   2          for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 674   3            SetDqStatus(LOW);
+ 675   3            OE = 0x00;          // DQ = 0x00
+ 676   3            Delay_5US();
+ 677   3          
+ 678   3            if(nCommand & 0x01) { 
+ 679   4              OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 680   4            }
+ 681   3          
+ 682   3            Delay_60US();
+ 683   3            OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 684   3            nCommand = nCommand >> 0x01;
+ 685   3          }
+ 686   2        }
+ 687   1        
+ 688   1        Delay_600US();
+ 689   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 690   1        nCommand = SkipRomCommand;
+ 691   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 692   2          SetDqStatus(LOW);
+ 693   2          OE = 0x00;          // DQ = 0x00
+ 694   2          Delay_5US();
+ 695   2          
+ 696   2          if(nCommand & 0x01) { 
+ 697   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 698   3          }
+ 699   2          
+ 700   2          Delay_60US();
+ 701   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 702   2          nCommand = nCommand >> 0x01;
+ 703   2        }
+ 704   1        
+ 705   1        Delay_600US();
+ 706   1        nCommand = OpenDoor;
+ 707   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 708   2          SetDqStatus(LOW);
+ 709   2          OE = 0x00;          // DQ = 0x00
+ 710   2          Delay_5US();
+ 711   2          
+ 712   2          if(nCommand & 0x01) { 
+ 713   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 13  
+
+ 714   3          }
+ 715   2          
+ 716   2          Delay_60US();
+ 717   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 718   2          nCommand = nCommand >> 0x01;
+ 719   2        }
+ 720   1        
+ 721   1        Delay_600US();
+ 722   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 723   1        nCommand = SkipRomCommand;
+ 724   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 725   2          SetDqStatus(LOW);
+ 726   2          OE = 0x00;          // DQ = 0x00
+ 727   2          Delay_5US();
+ 728   2          
+ 729   2          if(nCommand & 0x01) { 
+ 730   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 731   3          }
+ 732   2          
+ 733   2          Delay_60US();
+ 734   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 735   2          nCommand = nCommand >> 0x01;
+ 736   2        }
+ 737   1        
+ 738   1        Delay_600US();
+ 739   1        nCommand = ReadAdj1;
+ 740   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 741   2          SetDqStatus(LOW);
+ 742   2          OE = 0x00;          // DQ = 0x00
+ 743   2          Delay_5US();
+ 744   2          
+ 745   2          if(nCommand & 0x01) { 
+ 746   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 747   3          }
+ 748   2          
+ 749   2          Delay_60US();
+ 750   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 751   2          nCommand = nCommand >> 0x01;
+ 752   2        }
+ 753   1        
+ 754   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){ // CRC
+ 755   2          P3 |= 0xc0;     // DIR0 = DIR1 = 0x01，MCU -> DQ
+ 756   2          SetDqStatus(LOW);   // SLOT 开始
+ 757   2          OE = 0x00;        // DQ = 0x00
+ 758   2          Delay_5US();
+ 759   2          
+ 760   2          OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01，SLOT 结束
+ 761   2          SetDqStatus(HIGH);  // 复位MCU端口，准备接收1bit数据
+ 762   2          P3 &= 0x3f;     // DIR0 = DIR1 = 0x00，DQ -> MCU
+ 763   2          OE = 0x00;     
+ 764   2          Delay_5US();
+ 765   2          
+ 766   2          nP0Data = P0;
+ 767   2          nP1Data = P1;
+ 768   2          nP2Data = P2;
+ 769   2          nP4Data = P4;
+ 770   2          nP5Data = P5 & 0x3e;
+ 771   2          nP6Data = P6;
+ 772   2          nP7Data = P7;
+ 773   2          
+ 774   2          nPortData[nBitCunt][0] = nP0Data; 
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 14  
+
+ 775   2          nPortData[nBitCunt][1] = nP1Data; 
+ 776   2          nPortData[nBitCunt][2] = nP2Data; 
+ 777   2          nPortData[nBitCunt][3] = nP4Data; 
+ 778   2          nPortData[nBitCunt][4] = nP5Data >> 0x01; 
+ 779   2          nPortData[nBitCunt][5] = nP6Data; 
+ 780   2          nPortData[nBitCunt][6] = nP7Data; 
+ 781   2          
+ 782   2          Delay_60US(); // 等待DQ自己复位
+ 783   2        }
+ 784   1        
+ 785   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){ // 接收芯片发出来的数据
+ 786   2          nPortDataCunt = 0x00;
+ 787   2          for(nCunt = 0; nCunt < 7; nCunt++){ // 7个端口
+ 788   3            for(nChips = 0; nChips < nOnePortChipNumber[nCunt]; nChips++){ // 每个端口颗芯片的颗数
+ 789   4              if(nPortData[nBitCunt][nCunt] & n18B20BitPwr[nChips]){
+ 790   5                nAdj1Data[nPortDataCunt] = nAdj1Data[nPortDataCunt] + n18B20BitPwr[nBitCunt];
+ 791   5              }
+ 792   4              nPortDataCunt++;
+ 793   4            }
+ 794   3          }
+ 795   2        }
+ 796   1        
+ 797   1        ResetTC18B20(); // 该函数执行完毕后，245的输出被关闭，处于高阻状态，DIR0 = DIR1 = 
+             -0x01，MCU -> DQ，MCU连接DQ端口均被清零，但因上拉使得DQ = 1
+ 798   1        nCommand = SkipRomCommand;
+ 799   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 800   2          SetDqStatus(LOW);
+ 801   2          OE = 0x00;          // DQ = 0x00
+ 802   2          Delay_5US();
+ 803   2          
+ 804   2          if(nCommand & 0x01) { 
+ 805   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 806   3          }
+ 807   2          
+ 808   2          Delay_60US();
+ 809   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 810   2          nCommand = nCommand >> 0x01;
+ 811   2        }
+ 812   1        
+ 813   1        Delay_600US();
+ 814   1        nCommand = ReadAdj2;
+ 815   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){
+ 816   2          SetDqStatus(LOW);
+ 817   2          OE = 0x00;          // DQ = 0x00
+ 818   2          Delay_5US();
+ 819   2          
+ 820   2          if(nCommand & 0x01) { 
+ 821   3            OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 822   3          }
+ 823   2          
+ 824   2          Delay_60US();
+ 825   2          OE = 0x01;        // 关闭245输出，因上拉电阻所有的DQ = 0x01
+ 826   2          nCommand = nCommand >> 0x01;
+ 827   2        }
+ 828   1        
+ 829   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){ // CRC
+ 830   2          P3 |= 0xc0;     // DIR0 = DIR1 = 0x01，MCU -> DQ
+ 831   2          SetDqStatus(LOW);   // SLOT 开始
+ 832   2          OE = 0x00;        // DQ = 0x00
+ 833   2          Delay_5US();
+ 834   2          
+ 835   2          OE = 0x01;      // 关闭245输出，因上拉电阻所有的DQ = 0x01，SLOT 结束
+C51 COMPILER V9.60.0.0   RWDATA                                                            05/06/2023 12:08:17 PAGE 15  
+
+ 836   2          SetDqStatus(HIGH);  // 复位MCU端口，准备接收1bit数据
+ 837   2          P3 &= 0x3f;     // DIR0 = DIR1 = 0x00，DQ -> MCU
+ 838   2          OE = 0x00;     
+ 839   2          Delay_5US();
+ 840   2          
+ 841   2          nP0Data = P0;
+ 842   2          nP1Data = P1;
+ 843   2          nP2Data = P2;
+ 844   2          nP4Data = P4;
+ 845   2          nP5Data = P5;
+ 846   2          nP6Data = P6;
+ 847   2          nP7Data = P7;
+ 848   2          
+ 849   2          nPortData[nBitCunt][0] = nP0Data;
+ 850   2          nPortData[nBitCunt][1] = nP1Data;
+ 851   2          nPortData[nBitCunt][2] = nP2Data;
+ 852   2          nPortData[nBitCunt][3] = nP4Data;
+ 853   2          nPortData[nBitCunt][4] = nP5Data >> 0x01;
+ 854   2          nPortData[nBitCunt][5] = nP6Data;
+ 855   2          nPortData[nBitCunt][6] = nP7Data;
+ 856   2          
+ 857   2          Delay_60US(); // 等待DQ自己复位
+ 858   2        }
+ 859   1        
+ 860   1        for(nBitCunt = 0; nBitCunt < 8; nBitCunt++){ // 接收芯片发出来的数据
+ 861   2          nPortDataCunt = 0x00;
+ 862   2          for(nCunt = 0; nCunt < 7; nCunt++){ // 7个端口
+ 863   3            for(nChips = 0; nChips < nOnePortChipNumber[nCunt]; nChips++){ // 每个端口颗芯片的颗数
+ 864   4              if(nPortData[nBitCunt][nCunt] & n18B20BitPwr[nChips]){
+ 865   5                nAdj2Data[nPortDataCunt] = nAdj2Data[nPortDataCunt] + n18B20BitPwr[nBitCunt];
+ 866   5              }
+ 867   4              nPortDataCunt++;
+ 868   4            }
+ 869   3          }
+ 870   2        }
+ 871   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4541    ----
+   CONSTANT SIZE    =    104    ----
+   XDATA SIZE       =    136     118
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =    119    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
